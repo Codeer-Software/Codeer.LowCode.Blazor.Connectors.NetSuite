@@ -1,0 +1,79 @@
+{
+  "records": {
+    "subsidiary": {
+      "fields": {
+        "name": { "type": "string", "required": true, "title": "Name" },
+        "country": { "type": "string", "title": "Country" },
+        "isInactive": { "type": "boolean", "title": "Inactive" }
+      },
+      "rows": [
+        { "id": 1, "name": "Headquarters", "country": "JP", "isInactive": false },
+        { "id": 2, "name": "Japan Sales", "country": "JP", "isInactive": false },
+        { "id": 3, "name": "US Sales", "country": "US", "isInactive": false }
+      ]
+    },
+    "customer": {
+      "fields": {
+        "companyName": { "type": "string", "required": true, "title": "Company Name" },
+        "email": { "type": "string", "title": "Email" },
+        "isInactive": { "type": "boolean", "title": "Inactive" },
+        "creditLimit": { "type": "number", "title": "Credit Limit" },
+        "priority": { "type": "integer", "title": "Priority" },
+        "startDate": { "type": "date", "title": "Start Date" },
+        "lastModifiedDate": { "type": "dateTime", "title": "Date Last Modified" },
+        "subsidiary": { "type": "reference", "record": "subsidiary", "required": true, "title": "Subsidiary" }
+      },
+      "rows": [
+        { "id": 1, "companyName": "Alpha Trading", "email": "alpha@example.com", "isInactive": false, "creditLimit": 50000, "priority": 1, "startDate": "2024-04-01", "lastModifiedDate": "2026-01-05T09:15:00Z", "subsidiary": { "id": "2" } },
+        { "id": 2, "companyName": "Beta Foods", "email": "beta@example.com", "isInactive": false, "creditLimit": 12000.5, "priority": 2, "startDate": "2024-06-15", "lastModifiedDate": "2026-02-10T23:30:00Z", "subsidiary": { "id": "2" } },
+        { "id": 3, "companyName": "Gamma Systems", "email": "gamma@example.com", "isInactive": false, "creditLimit": 80000, "priority": 1, "startDate": "2023-11-20", "lastModifiedDate": "2026-03-01T00:00:00Z", "subsidiary": { "id": "3" } },
+        { "id": 4, "companyName": "Delta Logistics", "email": "delta@example.com", "isInactive": true, "creditLimit": 0, "priority": 3, "startDate": "2022-02-28", "lastModifiedDate": "2025-12-31T15:00:00Z", "subsidiary": { "id": "3" } },
+        { "id": 5, "companyName": "Epsilon Design", "email": "epsilon@example.com", "isInactive": false, "creditLimit": 3000, "priority": 3, "startDate": "2025-01-10", "lastModifiedDate": "2026-03-15T08:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 6, "companyName": "Zeta Motors", "isInactive": false, "creditLimit": 150000, "priority": 1, "startDate": "2021-07-01", "lastModifiedDate": "2026-01-20T12:00:00Z", "subsidiary": { "id": "3" } },
+        { "id": 7, "companyName": "Eta Pharmacy", "email": "eta@example.com", "isInactive": false, "creditLimit": 25000, "priority": 2, "startDate": "2024-09-09", "lastModifiedDate": "2026-02-28T14:45:30Z", "subsidiary": { "id": "2" } },
+        { "id": 8, "companyName": "Theta Books", "email": "theta@example.com", "isInactive": true, "lastModifiedDate": "2025-06-30T03:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 9, "companyName": "Iota Electric", "email": "iota@example.com", "isInactive": false, "creditLimit": 60000, "priority": 2, "startDate": "2023-03-03", "lastModifiedDate": "2026-03-03T03:03:03Z", "subsidiary": { "id": "3" } },
+        { "id": 10, "companyName": "Kappa Trading", "email": "kappa@example.com", "isInactive": false, "creditLimit": 45000, "priority": 2, "startDate": "2025-04-01", "lastModifiedDate": "2026-01-15T10:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 11, "companyName": "Lambda Foods", "email": "lambda@example.com", "isInactive": false, "creditLimit": 8000, "priority": 3, "startDate": "2025-08-20", "lastModifiedDate": "2026-02-01T09:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 12, "companyName": "Mu Consulting", "email": "mu@example.com", "isInactive": false, "creditLimit": 20000, "priority": 2, "startDate": "2024-12-01", "lastModifiedDate": "2026-03-10T17:20:00Z", "subsidiary": { "id": "3" } },
+        { "id": 13, "companyName": "Nu Textiles", "email": "nu@example.com", "isInactive": true, "creditLimit": 5000, "priority": 3, "startDate": "2020-05-05", "lastModifiedDate": "2025-11-11T11:11:11Z", "subsidiary": { "id": "3" } },
+        { "id": 14, "companyName": "Xi Robotics", "email": "xi@example.com", "isInactive": false, "creditLimit": 90000, "priority": 1, "startDate": "2025-10-10", "lastModifiedDate": "2026-03-20T06:30:00Z", "subsidiary": { "id": "3" } },
+        { "id": 15, "companyName": "Omicron Cafe", "email": "omicron@example.com", "isInactive": false, "creditLimit": 1500.75, "priority": 3, "startDate": "2026-01-05", "lastModifiedDate": "2026-03-21T21:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 16, "companyName": "Pi Software", "email": "pi@example.com", "isInactive": false, "creditLimit": 70000, "priority": 1, "startDate": "2023-08-08", "lastModifiedDate": "2026-02-14T02:14:00Z", "subsidiary": { "id": "3" } },
+        { "id": 17, "companyName": "Rho Construction", "email": "rho@example.com", "isInactive": false, "creditLimit": 110000, "priority": 1, "startDate": "2022-10-01", "lastModifiedDate": "2026-01-31T23:59:59Z", "subsidiary": { "id": "2" } },
+        { "id": 18, "companyName": "Sigma 100% Organic", "email": "sigma@example.com", "isInactive": false, "creditLimit": 15000, "priority": 2, "startDate": "2025-06-01", "lastModifiedDate": "2026-02-20T05:00:00Z", "subsidiary": { "id": "2" } },
+        { "id": 19, "companyName": "Tau_Tech Labs", "email": "tau@example.com", "isInactive": false, "creditLimit": 30000, "priority": 2, "startDate": "2024-02-29", "lastModifiedDate": "2026-03-12T13:00:00Z", "subsidiary": { "id": "3" } },
+        { "id": 20, "companyName": "Upsilon Travel", "isInactive": false, "creditLimit": 18000, "priority": 2, "startDate": "2025-03-31", "lastModifiedDate": "2026-03-05T12:00:00Z", "subsidiary": { "id": "1" } }
+      ]
+    },
+    "customrecord_sample": {
+      "fields": {
+        "name": { "type": "string", "required": true, "title": "Name" },
+        "custrecord_quantity": { "type": "integer", "title": "Quantity" },
+        "custrecord_amount": { "type": "number", "title": "Amount" },
+        "custrecord_date": { "type": "date", "title": "Date" },
+        "custrecord_customer": { "type": "reference", "record": "customer", "title": "Customer" },
+        "custrecord_status": { "type": "string", "title": "Status" },
+        "custrecord_done": { "type": "boolean", "title": "Done" },
+        "custrecord_recorded": { "type": "dateTime", "title": "Recorded" }
+      },
+      "rows": [
+        { "id": 1, "name": "Order A-001", "custrecord_quantity": 10, "custrecord_amount": 1200, "custrecord_date": "2026-01-05", "custrecord_customer": { "id": "1" }, "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2026-01-05T01:00:00Z" },
+        { "id": 2, "name": "Order A-002", "custrecord_quantity": 5, "custrecord_amount": 450.5, "custrecord_date": "2026-01-20", "custrecord_customer": { "id": "2" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-01-20T03:30:00Z" },
+        { "id": 3, "name": "Order A-003", "custrecord_quantity": 8, "custrecord_amount": 980, "custrecord_date": "2026-02-02", "custrecord_customer": { "id": "1" }, "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2026-02-02T10:00:00Z" },
+        { "id": 4, "name": "Order A-004", "custrecord_quantity": 2, "custrecord_amount": 150, "custrecord_date": "2026-02-14", "custrecord_customer": { "id": "3" }, "custrecord_status": "lost", "custrecord_done": true, "custrecord_recorded": "2026-02-14T23:00:00Z" },
+        { "id": 5, "name": "Order A-005", "custrecord_quantity": 12, "custrecord_amount": 2400, "custrecord_date": "2026-02-28", "custrecord_customer": { "id": "5" }, "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2026-02-28T16:00:00Z" },
+        { "id": 6, "name": "Order A-006", "custrecord_quantity": 1, "custrecord_amount": 75.25, "custrecord_date": "2026-03-03", "custrecord_customer": { "id": "2" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-03-03T08:15:00Z" },
+        { "id": 7, "name": "Order A-007", "custrecord_quantity": 20, "custrecord_amount": 3100, "custrecord_date": "2026-03-15", "custrecord_customer": { "id": "1" }, "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2026-03-15T12:00:00Z" },
+        { "id": 8, "name": "Order A-008", "custrecord_quantity": 3, "custrecord_amount": 300, "custrecord_date": "2026-03-31", "custrecord_customer": { "id": "7" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-03-31T20:00:00Z" },
+        { "id": 9, "name": "Order A-009", "custrecord_quantity": 6, "custrecord_amount": 720, "custrecord_date": "2026-04-01", "custrecord_customer": { "id": "3" }, "custrecord_status": "lost", "custrecord_done": true, "custrecord_recorded": "2026-04-01T00:30:00Z" },
+        { "id": 10, "name": "Order A-010", "custrecord_date": "2026-04-10", "custrecord_customer": { "id": "9" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-04-10T09:00:00Z" },
+        { "id": 11, "name": "Order A-011", "custrecord_quantity": 15, "custrecord_amount": 1800, "custrecord_date": "2026-04-22", "custrecord_customer": { "id": "5" }, "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2026-04-22T05:00:00Z" },
+        { "id": 12, "name": "Order A-012", "custrecord_quantity": 4, "custrecord_amount": 520, "custrecord_date": "2025-12-24", "custrecord_customer": { "id": "2" }, "custrecord_status": "lost", "custrecord_done": true, "custrecord_recorded": "2025-12-24T15:30:00Z" },
+        { "id": 13, "name": "Order A-013", "custrecord_quantity": 9, "custrecord_amount": 1350, "custrecord_date": "2025-11-30", "custrecord_status": "won", "custrecord_done": true, "custrecord_recorded": "2025-11-30T15:00:00Z" },
+        { "id": 14, "name": "Order A-014", "custrecord_quantity": 7, "custrecord_amount": 840, "custrecord_customer": { "id": "1" }, "custrecord_done": false },
+        { "id": 15, "name": "Order A-015", "custrecord_quantity": 11, "custrecord_amount": 1650, "custrecord_date": "2026-05-06", "custrecord_customer": { "id": "12" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-05-06T07:45:00Z" }
+      ]
+    }
+  }
+}

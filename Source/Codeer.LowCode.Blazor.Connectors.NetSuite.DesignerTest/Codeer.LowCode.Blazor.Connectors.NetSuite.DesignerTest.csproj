@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- デザイナ (Example/LowCodeApp.Designer) を起動して Friendly で操作する GUI テスト。WPF なので VS の MSBuild でビルドする -->
+	<PropertyGroup>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<NoWarn>$(NoWarn);NU1701</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+		<PackageReference Include="NUnit" Version="3.14.0" />
+		<PackageReference Include="NUnit.Analyzers" Version="3.9.0" />
+		<PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+		<PackageReference Include="Codeer.Friendly" Version="2.7.0" />
+		<PackageReference Include="Codeer.Friendly.Windows" Version="2.18.0" />
+		<PackageReference Include="Codeer.Friendly.Windows.Grasp" Version="2.15.0" />
+		<PackageReference Include="RM.Friendly.WPFStandardControls" Version="1.60.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\NetSuite.Mock\NetSuite.Mock.csproj" />
+		<!-- 起動するデザイナ。出力は参照しない (先にビルドされるようにするだけ) -->
+		<ProjectReference Include="..\Example\LowCodeApp.Designer\LowCodeApp.Designer.csproj" ReferenceOutputAssembly="false" Private="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="NUnit.Framework" />
+		<Using Include="System.IO" />
+	</ItemGroup>
+
+</Project>
