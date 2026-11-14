@@ -9,7 +9,7 @@
 		<Version>0.1.0</Version>
 		<Authors>Codeer</Authors>
 		<Company>Codeer</Company>
-		<Description>Designer support for Codeer.LowCode.Blazor.Connectors.NetSuite. Registers the specification document that AI assistants read when designing modules bound to NetSuite records.</Description>
+		<Description>Designer support for Codeer.LowCode.Blazor.Connectors.NetSuite.Server.Registers the specification document that AI assistants read when designing modules bound to NetSuite records.</Description>
 		<PackageProjectUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.NetSuite</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.NetSuite</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
@@ -27,7 +27,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite\Codeer.LowCode.Blazor.Connectors.NetSuite.csproj" />
+		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite.Server\Codeer.LowCode.Blazor.Connectors.NetSuite.Server.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,0 +1,417 @@
+{
+  "Name": "Customer",
+  "DataSourceName": "NetSuite",
+  "DbTable": "customer",
+  "Fields": [
+    {
+      "DbColumn": "id",
+      "Name": "Id",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign"
+    },
+    {
+      "Target": "HistoryBack",
+      "Icon": "bi bi-arrow-left-circle-fill",
+      "TitleText": "",
+      "Name": "BackButton",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
+    },
+    {
+      "Text": "顧客",
+      "Style": "H4",
+      "Name": "PageTitle",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "CompanyName",
+      "Name": "CompanyNameLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "companyname",
+      "DisplayName": "会社名",
+      "Name": "CompanyName",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "Subsidiary",
+      "Name": "SubsidiaryLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "SearchCondition": {
+        "LimitCount": 50,
+        "ModuleName": "Subsidiary"
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "Name.Value",
+      "DbColumn": "subsidiary",
+      "DisplayName": "子会社",
+      "Name": "Subsidiary",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LinkFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "Email",
+      "Name": "EmailLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "email",
+      "DisplayName": "メール",
+      "Name": "Email",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "CreditLimit",
+      "Name": "CreditLimitLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "creditlimit",
+      "DisplayName": "与信限度額",
+      "Name": "CreditLimit",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "Priority",
+      "Name": "PriorityLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "priority",
+      "MaxFractionDigits": 0,
+      "DisplayName": "優先度",
+      "Name": "Priority",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "StartDate",
+      "Name": "StartDateLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "startdate",
+      "DisplayName": "開始日",
+      "Name": "StartDate",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+    },
+    {
+      "DbColumn": "isinactive",
+      "DisplayName": "無効",
+      "Name": "IsInactive",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
+    },
+    {
+      "Text": "保存",
+      "Name": "SubmitButton",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
+    }
+  ],
+  "DetailLayouts": {
+    "": {
+      "Layout": {
+        "Name": "",
+        "Padding": {
+          "Left": 16,
+          "Top": 16,
+          "Right": 16,
+          "Bottom": 16
+        },
+        "Rows": [
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "BackButton",
+                  "FontSize": 30,
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 60
+              },
+              {
+                "Layout": {
+                  "FieldName": "PageTitle",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Center"
+              },
+              {
+                "Width": 60
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "CompanyNameLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "CompanyName",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "SubsidiaryLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "Subsidiary",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "EmailLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "Email",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "CreditLimitLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "CreditLimit",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "PriorityLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "Priority",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "StartDateLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 130,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "StartDate",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Width": 130
+              },
+              {
+                "Layout": {
+                  "FieldName": "IsInactive",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Margin": {
+              "Top": 12
+            },
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "SubmitButton",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Center"
+              }
+            ]
+          }
+        ],
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
+      }
+    }
+  },
+  "ListLayouts": {
+    "": {
+      "Elements": [
+        [
+          {
+            "FieldName": "CompanyName"
+          },
+          {
+            "FieldName": "Subsidiary",
+            "Width": 160
+          },
+          {
+            "FieldName": "Email",
+            "Width": 200
+          },
+          {
+            "FieldName": "CreditLimit",
+            "Width": 120
+          },
+          {
+            "FieldName": "StartDate",
+            "Width": 120
+          }
+        ]
+      ]
+    }
+  },
+  "SearchLayouts": {
+    "": {
+      "Layout": {
+        "Name": "",
+        "IsBordered": true,
+        "Rows": [
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "Name": "",
+                  "Rows": [
+                    {
+                      "Margin": {
+                        "Bottom": 0
+                      },
+                      "Columns": [
+                        {
+                          "Layout": {
+                            "FieldName": "CompanyNameLabel",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          },
+                          "VerticalAlignment": "Bottom"
+                        }
+                      ]
+                    },
+                    {
+                      "Columns": [
+                        {
+                          "Layout": {
+                            "FieldName": "CompanyName",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
+                },
+                "Width": 240
+              },
+              {
+                "Layout": {
+                  "Name": "",
+                  "Rows": [
+                    {
+                      "Margin": {
+                        "Bottom": 0
+                      },
+                      "Columns": [
+                        {
+                          "Layout": {
+                            "FieldName": "SubsidiaryLabel",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          },
+                          "VerticalAlignment": "Bottom"
+                        }
+                      ]
+                    },
+                    {
+                      "Columns": [
+                        {
+                          "Layout": {
+                            "FieldName": "Subsidiary",
+                            "Name": "",
+                            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.GridLayoutDesign"
+                },
+                "Width": 240
+              },
+              {}
+            ]
+          }
+        ],
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
+      }
+    }
+  }
+}

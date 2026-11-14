@@ -1,5 +1,6 @@
 using Codeer.LowCode.Blazor.Connectors.NetSuite.Designer;
 using Codeer.LowCode.Blazor.Designer;
+using Codeer.LowCode.Blazor.Extras.Designer;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 
@@ -11,6 +12,9 @@ public partial class App : DesignerApp
     {
         //DB への接続 (NetSuite のデータソースは DbAccessorFactory で包む)
         Services.AddSingleton<IDbAccessorFactory, DbAccessorFactory>();
+
+        //Extras のフィールド (Example/Design のユーザーモジュールのログイン設定)
+        ExtrasDesignerInitializer.Initialize(BlazorRuntime);
 
         //NetSuite: AI 用の仕様ドキュメントの登録と、メタ情報をファイルから読む設定。base.OnStartup より前に呼ぶ
         NetSuiteDesignerInitializer.Initialize(DesignerEnvironment);

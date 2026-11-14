@@ -3,7 +3,7 @@
 ## プロジェクト概要
 
 Codeer.LowCode.Blazor (CLB) のモジュールを Oracle NetSuite のレコードに結び付けるコネクター。
-NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.NetSuite` (MIT) として配布する。
+NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.NetSuite.Server` / `Codeer.LowCode.Blazor.Connectors.NetSuite.Designer` (MIT) として配布する。
 
 - **ターゲット**: .NET 8.0 / C# (Nullable 有効, ImplicitUsings 有効)
 - **本体リポジトリ**: `C:\tfs\codeer\Codeer.LowCode.Blazor` (参照用、直接編集しない)。本体は NuGet パッケージで参照する
@@ -16,7 +16,7 @@ NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.NetSuite` (MIT) とし�
 ```
 Source/
 ├── Codeer.LowCode.Blazor.Connectors.NetSuite.slnx
-├── Codeer.LowCode.Blazor.Connectors.NetSuite/        # ライブラリ (WPF・ASP.NET に依存しない)
+├── Codeer.LowCode.Blazor.Connectors.NetSuite.Server/ # サーバー側ライブラリ (WPF・ASP.NET に依存しない)
 │   ├── NetSuiteDbAccessor.cs          # IDbAccessor のデコレータ (公開の入口)
 │   ├── NetSuiteConnection.cs          # 接続 1 つ: 認証・送信 (再試行・エラー分類)・定義・SuiteQL・レコード操作
 │   ├── NetSuiteConnectionSettings.cs  # ConnectionString "Provider=NetSuite;..." の読み取り
@@ -33,20 +33,32 @@ Source/
 │   ├── MockRecordType.cs              # mock-data.json の読み取りと値の変換
 │   └── mock-data.json                 # 既定の定義と初期データ (架空のサンプル)。利用者向けの説明は Docs/NetSuiteMock.md
 ├── Codeer.LowCode.Blazor.Connectors.NetSuite.Test/   # NUnit。HTTP は偽物 (Harness/FakeNetSuite) とモック (Harness/MockHarness = モック + 本物のコネクター + 本体の ModuleDataIO)
-├── Example/LowCodeApp.Designer/     # コネクターを組み込んだデザイナ (WPF)。結線の見本 (App.xaml.cs / DbAccessorFactory.cs) 兼 GUI テストの対象。パッケージにしない
+├── Example/                         # サンプル (パッケージにしない)。動かし方は Docs/Example.md
+│   ├── LowCodeApp.Designer/         # コネクターを組み込んだデザイナ (WPF・net8)。結線の見本 (App.xaml.cs / DbAccessorFactory.cs) 兼 GUI テストの対象。Design の AppUser のため Extras.Designer も組み込む
+│   ├── LowCodeApp.Server/ LowCodeApp.Client/ LowCodeApp.Client.Shared/   # Web アプリ (net10)。Starter の Cookie ホストを StarterTool export-app で書き出したもの
+│   │                                # テンプレートとの違い: DataService.cs の NetSuiteDbAccessor の 2 行・.Server の ProjectReference・appsettings (Main = SQLite / NetSuite)・パッケージの版 (公開済みの版)
+│   │                                # NetSuite の接続文字列は appsettings に書かない (環境変数 ConnectionStrings__NetSuite)
+│   ├── Design/                      # デザインのプロジェクト。Customer / Subsidiary / CustomRecordSample (NetSuite)・AppUser (SQLite)・netsuite.NetSuite.metadata.json (モックの定義)
+│   └── Data/main.sql                # ログインするユーザーの表と admin / admin
+├── Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest/   # NUnit のブラウザテスト (ヘッドレス Chrome)。Example の Web アプリを別プロセスで起動して操作する
+│   ├── Harness/MockServer.cs          # モックをこのプロセスの Kestrel で 127.0.0.1 の空きポートに立てる・モックのデータを SuiteQL で確かめる
+│   ├── Harness/AppServer.cs           # 一時フォルダに鍵・SQLite・App.zip を作り、Example の Server を環境変数で設定を上書きして起動 (止めるのは自分が起動したプロセスだけ)
+│   ├── PageObject/                    # 手書き (Example のデザイナには pageobject の CLI が無い)。モジュールのレイアウトを変えたら合わせる
+│   └── Scenario/                      # 一覧 (リンク先の名前)・検索・作成/更新/削除
 └── Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest/   # NUnit の GUI テスト。Example のデザイナを起動して Friendly で操作する
     ├── Harness/MockServer.cs          # モックを Kestrel で 127.0.0.1 の空きポートに立てる (要求を数える・同じポートで立て直す)。DeadPort = 届かない NetSuite
     ├── Harness/DesignProject.cs       # テストごとの一時フォルダ: 空のデザインプロジェクト (NetSuite のデータソースだけ) とその場で作った鍵
     └── Drivers/DesignerDriver.cs      # 起動 (引数で app.clprj を開く)・メニュー・トースト・MessageWindow・テーブルの定義・モジュール作成・デザインチェック
 ```
 
-パッケージは 2 つ (Extras と Extras.Designer と同じ分け方): サーバーは本体パッケージ、デザイナは `.Designer` (本体パッケージに依存) を参照する。
+パッケージは 2 つ (Extras.Server と Extras.Designer と同じ分け方): サーバーは `.Server`、デザイナは `.Designer` (`.Server` に依存) を参照する。
+無印の `Codeer.LowCode.Blazor.Connectors.NetSuite` は、フロント用のフィールドを足すときのために空けてある (Extras の無印と同じ位置づけ)。
 
 ## ビルド・テスト
 
 ```bash
 cd Source
-MSBUILDDISABLENODEREUSE=1 dotnet build Codeer.LowCode.Blazor.Connectors.NetSuite -m:1
+MSBUILDDISABLENODEREUSE=1 dotnet build Codeer.LowCode.Blazor.Connectors.NetSuite.Server -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet test Codeer.LowCode.Blazor.Connectors.NetSuite.Test -m:1
 ```
 
@@ -69,6 +81,18 @@ dotnet test Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest/bin/Debug/net
 - 1 回の起動に上限 (120 秒) があり、超えるとそのテストが起動したデザイナだけを止める (プロセス名で一括に止めない)
 - WebView (Blazor) の中は WPF のラッパーで触れないので、テーブルからのモジュール作成とデザインチェックは対象プロセスの中の API を直接呼ぶ
   (作成は DB から取り込むときと同じ変換 `DbColumnFieldConverter.ConvertForModule` + デザイナの保存。Example は最小構成で、Designer.Standard の「DB から取り込む」メニューは無い)
+
+### ブラウザのテスト (SeleniumTest)
+
+```bash
+cd Source
+MSBUILDDISABLENODEREUSE=1 dotnet build Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest -m:1
+dotnet test Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest --no-build
+```
+
+- ビルドすると Example の Server も同じ構成 (Debug / Release) でビルドされ、テストはその出力 (`bin/<構成>/net10.0`) を `dotnet` で起動する
+- 一覧・検索はモックの初期データ (mock-data.json) を前提にしている
+- 画面の変化は条件待ち (上限 30 秒 = `WebDriverManager.WaitTimeout`)。超えたらフリーズとして失敗にする。失敗するとスクリーンショットとサーバーの出力が残る
 
 ## 設計: NetSuite を IDbAccessor として見せる
 

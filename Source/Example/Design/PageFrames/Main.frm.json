@@ -1,0 +1,56 @@
+{
+  "IsApplicationRoot": true,
+  "Name": "Main",
+  "Left": {
+    "IsVisible": true,
+    "Home": {
+      "Type": "Text",
+      "Text": "Home"
+    },
+    "Links": [
+      {
+        "Title": "顧客",
+        "Module": "Customer"
+      },
+      {
+        "Title": "子会社",
+        "Module": "Subsidiary"
+      },
+      {
+        "Title": "カスタムレコード",
+        "Module": "CustomRecordSample"
+      },
+      {
+        "Title": "ユーザー",
+        "Module": "AppUser"
+      }
+    ],
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Right": {
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Header": {
+    "Foreground": "#000000",
+    "Background": "#f8f9fa"
+  },
+  "TopPageModuleDesign": {
+    "Module": "Home",
+    "ListPageDesign": {
+      "ListFieldDesign": {
+        "SearchCondition": {
+          "LimitCount": 50
+        },
+        "PagerPosition": "Bottom",
+        "CanDelete": true,
+        "Name": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+      }
+    }
+  },
+  "TopPageModule": "Home"
+}

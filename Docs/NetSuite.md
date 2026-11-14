@@ -72,7 +72,7 @@ Sandbox の M2M の設定は本番からコピーされず、Sandbox を更新�
 
 | プロジェクト | パッケージ |
 |---|---|
-| アプリ (サーバー) | `Codeer.LowCode.Blazor.Connectors.NetSuite` |
+| アプリ (サーバー) | `Codeer.LowCode.Blazor.Connectors.NetSuite.Server` |
 | デザイナ | `Codeer.LowCode.Blazor.Connectors.NetSuite.Designer` |
 
 ### アプリ (サーバー)
@@ -80,7 +80,7 @@ Sandbox の M2M の設定は本番からコピーされず、Sandbox を更新�
 `ModuleDataIO` に渡す `IDbAccessor` を `NetSuiteDbAccessor` で包みます。
 
 ```csharp
-using Codeer.LowCode.Blazor.Connectors.NetSuite;
+using Codeer.LowCode.Blazor.Connectors.NetSuite.Server;
 
 DbAccess = new DbAccessor(SystemConfig.Instance.DataSources);
 var netSuite = new NetSuiteDbAccessor(DbAccess, NetSuiteConnection.FromDataSources(SystemConfig.Instance.DataSources));

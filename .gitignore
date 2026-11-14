@@ -429,3 +429,7 @@ FodyWeavers.xsd
 
 # NetSuite mock: disposable key generated at startup
 mock-key.pem
+
+# Example design: machine-specific connection strings / deploy target, and the designer's editor state
+Source/Example/Design/designer.settings.Development.json
+Source/Example/Design/.ide/

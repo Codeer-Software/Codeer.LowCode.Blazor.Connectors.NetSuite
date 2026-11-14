@@ -1,3 +1,4 @@
+using Codeer.LowCode.Blazor.Connectors.NetSuite.Server;
 using System.Security.Cryptography;
 
 namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness

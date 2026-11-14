@@ -1,4 +1,5 @@
 using Codeer.LowCode.Blazor.Aggregation;
+using Codeer.LowCode.Blazor.Connectors.NetSuite.Server;
 using Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness;
 using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DesignLogic;

@@ -1,10 +1,14 @@
 <Solution>
   <Folder Name="/Example/">
+    <Project Path="Example/LowCodeApp.Client.Shared/LowCodeApp.Client.Shared.csproj" />
+    <Project Path="Example/LowCodeApp.Client/LowCodeApp.Client.csproj" />
     <Project Path="Example/LowCodeApp.Designer/LowCodeApp.Designer.csproj" />
+    <Project Path="Example/LowCodeApp.Server/LowCodeApp.Server.csproj" />
   </Folder>
   <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite.Designer/Codeer.LowCode.Blazor.Connectors.NetSuite.Designer.csproj" />
   <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest/Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest.csproj" />
+  <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest/Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.csproj" />
+  <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite.Server/Codeer.LowCode.Blazor.Connectors.NetSuite.Server.csproj" />
   <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite.Test/Codeer.LowCode.Blazor.Connectors.NetSuite.Test.csproj" />
-  <Project Path="Codeer.LowCode.Blazor.Connectors.NetSuite/Codeer.LowCode.Blazor.Connectors.NetSuite.csproj" />
   <Project Path="NetSuite.Mock/NetSuite.Mock.csproj" />
 </Solution>

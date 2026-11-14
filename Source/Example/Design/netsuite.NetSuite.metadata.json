@@ -1,0 +1,129 @@
+{
+  "Records": [
+    {
+      "Name": "customer",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "companyName",
+          "Kind": "String",
+          "Required": true
+        },
+        {
+          "Name": "creditLimit",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "email",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "isInactive",
+          "Kind": "Boolean",
+          "Required": false
+        },
+        {
+          "Name": "lastModifiedDate",
+          "Kind": "DateTime",
+          "Required": false
+        },
+        {
+          "Name": "priority",
+          "Kind": "Integer",
+          "Required": false
+        },
+        {
+          "Name": "startDate",
+          "Kind": "Date",
+          "Required": false
+        },
+        {
+          "Name": "subsidiary",
+          "Kind": "Reference",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "customrecord_sample",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_amount",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_customer",
+          "Kind": "Reference",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_date",
+          "Kind": "Date",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_done",
+          "Kind": "Boolean",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_quantity",
+          "Kind": "Integer",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_recorded",
+          "Kind": "DateTime",
+          "Required": false
+        },
+        {
+          "Name": "custrecord_status",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "name",
+          "Kind": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "subsidiary",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "country",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "isInactive",
+          "Kind": "Boolean",
+          "Required": false
+        },
+        {
+          "Name": "name",
+          "Kind": "String",
+          "Required": true
+        }
+      ]
+    }
+  ]
+}

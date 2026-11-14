@@ -13,7 +13,7 @@ NetSuite をデータソースの 1 つとして登録すると、DB のテー�
 
 ## 使い方
 
-アプリ (サーバー) に `Codeer.LowCode.Blazor.Connectors.NetSuite`、デザイナに `Codeer.LowCode.Blazor.Connectors.NetSuite.Designer` を追加します。
+アプリ (サーバー) に `Codeer.LowCode.Blazor.Connectors.NetSuite.Server`、デザイナに `Codeer.LowCode.Blazor.Connectors.NetSuite.Designer` を追加します。
 
 データソースに NetSuite の接続を書き、
 
@@ -38,6 +38,8 @@ var netSuite = NetSuiteDesignerInitializer.CreateDbAccessor(new DbAccessor(dataS
 設定の項目・モジュールの作り方・動きと制限は [Docs/NetSuite.md](Docs/NetSuite.md) にあります。
 
 NetSuite のアカウントが無くても、手元で動くモック (`dotnet run --project Source/NetSuite.Mock`) にアプリとデザイナをつないで試せます。使い方と、実物と違う点は [Docs/NetSuiteMock.md](Docs/NetSuiteMock.md) にあります。
+
+コネクターを組み込んだ Web アプリとデザインのサンプルが `Source/Example` にあります。モックにつないで動かす手順は [Docs/Example.md](Docs/Example.md) にあります。
 
 ## ライセンス
 
