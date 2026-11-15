@@ -101,6 +101,205 @@
       ]
     },
     {
+      "Name": "employee",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "email",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "entityId",
+          "Kind": "String",
+          "Required": true
+        },
+        {
+          "Name": "firstName",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "isInactive",
+          "Kind": "Boolean",
+          "Required": false
+        },
+        {
+          "Name": "lastName",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "subsidiary",
+          "Kind": "Reference",
+          "Required": true
+        },
+        {
+          "Name": "title",
+          "Kind": "String",
+          "Required": false
+        }
+      ]
+    },
+    {
+      "Name": "item",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "basePrice",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "displayName",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "isInactive",
+          "Kind": "Boolean",
+          "Required": false
+        },
+        {
+          "Name": "itemId",
+          "Kind": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "salesorder",
+      "Fields": [
+        {
+          "Name": "id",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "entity",
+          "Kind": "Reference",
+          "Required": true
+        },
+        {
+          "Name": "item",
+          "Kind": "Sublist",
+          "Required": false,
+          "Fields": [
+            {
+              "Name": "line",
+              "Kind": "Integer",
+              "Required": false
+            },
+            {
+              "Name": "item",
+              "Kind": "Reference",
+              "Required": true
+            },
+            {
+              "Name": "quantity",
+              "Kind": "Number",
+              "Required": false
+            },
+            {
+              "Name": "rate",
+              "Kind": "Number",
+              "Required": false
+            },
+            {
+              "Name": "amount",
+              "Kind": "Number",
+              "Required": false
+            },
+            {
+              "Name": "description",
+              "Kind": "String",
+              "Required": false
+            },
+            {
+              "Name": "expectedShipDate",
+              "Kind": "Date",
+              "Required": false
+            }
+          ]
+        },
+        {
+          "Name": "memo",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "otherRefNum",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "tranDate",
+          "Kind": "Date",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "salesorder_item",
+      "Parent": "salesorder",
+      "Sublist": "item",
+      "Fields": [
+        {
+          "Name": "uniquekey",
+          "Kind": "String",
+          "Required": true
+        },
+        {
+          "Name": "transaction",
+          "Kind": "Reference",
+          "Required": true
+        },
+        {
+          "Name": "linesequencenumber",
+          "Kind": "Integer",
+          "Required": false
+        },
+        {
+          "Name": "item",
+          "Kind": "Reference",
+          "Required": true
+        },
+        {
+          "Name": "quantity",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "rate",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "amount",
+          "Kind": "Number",
+          "Required": false
+        },
+        {
+          "Name": "description",
+          "Kind": "String",
+          "Required": false
+        },
+        {
+          "Name": "expectedShipDate",
+          "Kind": "Date",
+          "Required": false
+        }
+      ]
+    },
+    {
       "Name": "subsidiary",
       "Fields": [
         {

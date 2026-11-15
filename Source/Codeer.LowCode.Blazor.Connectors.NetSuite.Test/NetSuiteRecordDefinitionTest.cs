@@ -144,5 +144,99 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
                 "id", "companyname", "creditlimit", "isinactive", "lastmodifieddate", "startdate", "subsidiary",
             }));
         }
+
+        // ---------------------------------------------------------------- 明細 (サブリスト)
+
+        static Task<NetSuiteRecordDefinition> ParseAsync(string schema, Dictionary<string, string>? catalog = null, List<string>? requested = null)
+        {
+            using var json = JsonDocument.Parse(schema);
+            return NetSuiteRecordDefinition.FromJsonSchemaAsync("salesorder", json.RootElement.Clone(), name =>
+            {
+                requested?.Add(name);
+                return Task.FromResult(catalog != null && catalog.TryGetValue(name, out var text) ? (JsonElement?)JsonDocument.Parse(text).RootElement.Clone() : null);
+            });
+        }
+
+        const string RowProperties = """
+            {
+              "line": { "type": "integer" },
+              "item": { "type": "object", "properties": { "id": { "type": "string" }, "refName": { "type": "string" } } },
+              "quantity": { "type": "number" },
+              "expectedShipDate": { "type": "string", "format": "date" },
+              "inventoryDetail": { "$ref": "/services/rest/record/v1/metadata-catalog/salesOrder-item-inventoryDetail" },
+              "links": { "type": "array" }
+            }
+            """;
+
+        [Test]
+        public async Task その場に書かれた明細はlineを持てば列になり行の項目を持つ()
+        {
+            var definition = await ParseAsync($$$$"""
+                {"properties":{
+                  "id":{"type":"string"},
+                  "item":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{{{{RowProperties}}}},"required":["item"]}},"totalResults":{"type":"integer"}}}
+                }}
+                """);
+
+            var sublist = definition.FindByColumn("item")!;
+            Assert.That(sublist.Kind, Is.EqualTo(NetSuiteFieldKind.Sublist));
+            Assert.That(sublist.RestName, Is.EqualTo("item"));
+            //入れ子 (inventoryDetail) と links は行の項目にしない
+            Assert.That(sublist.SublistFields.Select(e => (e.RestName, e.Kind)), Is.EqualTo(new[]
+            {
+                ("line", NetSuiteFieldKind.Integer),
+                ("item", NetSuiteFieldKind.Reference),
+                ("quantity", NetSuiteFieldKind.Number),
+                ("expectedShipDate", NetSuiteFieldKind.Date),
+            }));
+            Assert.That(sublist.FindSublistField("item")!.IsNullable, Is.False);
+            Assert.That(sublist.FindSublistField("quantity")!.IsNullable, Is.True);
+
+            var column = definition.ToTableDefinition().Columns.Single(e => e.Name == "item");
+            Assert.That((column.NetTypeFullName, column.RawDbTypeName), Is.EqualTo((typeof(string).FullName, "CLOB")));
+        }
+
+        [Test]
+        public async Task refの明細は集まりと行の定義を読んでたどる()
+        {
+            var requested = new List<string>();
+            var definition = await ParseAsync("""
+                {"properties":{"id":{"type":"string"},"item":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-itemCollection"}}}
+                """, new()
+                {
+                    ["salesOrder-itemCollection"] = """{"type":"object","properties":{"items":{"type":"array","items":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-itemElement"}}}}""",
+                    ["salesOrder-itemElement"] = $$$"""{"type":"object","properties":{{{RowProperties}}}}""",
+                }, requested);
+
+            Assert.That(definition.FindByColumn("item")!.SublistFields.Select(e => e.RestName), Is.EqualTo(new[] { "line", "item", "quantity", "expectedShipDate" }));
+            Assert.That(requested, Is.EqualTo(new[] { "salesOrder-itemCollection", "salesOrder-itemElement" }));
+        }
+
+        [Test]
+        public async Task lineの無い明細と読めない明細と循環するrefは列にしない()
+        {
+            var requested = new List<string>();
+            var definition = await ParseAsync("""
+                {"properties":{
+                  "id":{"type":"string"},
+                  "addressBook":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"addressId":{"type":"string"}}}}}},
+                  "missing":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-missingCollection"},
+                  "loop":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-loop"},
+                  "bad":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-x?y"}
+                }}
+                """, new()
+                {
+                    ["salesOrder-loop"] = """{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-loop"}""",
+                }, requested);
+
+            Assert.That(definition.Fields.Select(e => e.Column), Is.EqualTo(new[] { "id" }));
+            //たどる回数には上限がある・名前に使えない文字の $ref は読みに行かない
+            Assert.That(requested.Count(e => e == "salesOrder-loop"), Is.EqualTo(4));
+            Assert.That(requested, Has.None.Contains("?"));
+
+            //たどる先を渡さなければ $ref の明細は読みに行かず列にしない
+            using var json = JsonDocument.Parse("""{"properties":{"item":{"$ref":"/services/rest/record/v1/metadata-catalog/salesOrder-itemCollection"}}}""");
+            Assert.That(NetSuiteRecordDefinition.FromJsonSchema("salesorder", json.RootElement).Fields, Is.Empty);
+        }
     }
 }

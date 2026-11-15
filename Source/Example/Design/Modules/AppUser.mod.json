@@ -19,11 +19,17 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
+      "DbColumn": "email",
+      "Name": "メール",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
       "Name": "パスワード",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.PasswordFieldDesign"
     },
     {
       "LoginName": "ユーザー識別名",
+      "ExternalLoginName": "メール",
       "DisplayName": "表示名",
       "PasswordField": "パスワード",
       "DbColumnPasswordHash": "hash",
@@ -55,6 +61,12 @@
       "Text": "",
       "RelativeField": "表示名",
       "Name": "表示名Label",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "Text": "",
+      "RelativeField": "メール",
+      "Name": "メールLabel",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
@@ -146,6 +158,26 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "メールLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 154,
+                "VerticalAlignment": "Middle"
+              },
+              {
+                "Layout": {
+                  "FieldName": "メール",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
                   "FieldName": "パスワードLabel",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
@@ -199,6 +231,9 @@
           },
           {
             "FieldName": "表示名"
+          },
+          {
+            "FieldName": "メール"
           }
         ]
       ]

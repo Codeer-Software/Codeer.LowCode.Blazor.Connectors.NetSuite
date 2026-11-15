@@ -14,6 +14,12 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         class RecordData
         {
             public string Name { get; set; } = string.Empty;
+            /// <summary>明細の表なら親のレコード名。レコードなら null (書かない)。</summary>
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Parent { get; set; }
+            /// <summary>明細の表なら、親のレコードでの明細の REST 名。</summary>
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Sublist { get; set; }
             public List<FieldData> Fields { get; set; } = new();
         }
 
@@ -22,6 +28,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             public string Name { get; set; } = string.Empty;
             public NetSuiteFieldKind Kind { get; set; }
             public bool Required { get; set; }
+            /// <summary>明細 (Sublist) の行の項目。明細でなければ null (書かない)。</summary>
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<FieldData>? Fields { get; set; }
         }
 
         class FileData
@@ -55,11 +64,30 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 Records = records.OrderBy(e => e.Name, StringComparer.Ordinal).Select(record => new RecordData
                 {
                     Name = record.Name,
-                    Fields = record.Fields.Select(field => new FieldData { Name = field.RestName, Kind = field.Kind, Required = !field.IsNullable }).ToList(),
+                    Parent = record.LineParent,
+                    Sublist = record.LineSublist,
+                    Fields = record.Fields.Select(ToFieldData).ToList(),
                 }).ToList(),
             };
             await File.WriteAllTextAsync(GetPath(directory, connection.Settings.Name), JsonSerializer.Serialize(data, _jsonOptions));
         }
+
+        static FieldData ToFieldData(NetSuiteFieldDefinition field) => new()
+        {
+            Name = field.RestName,
+            Kind = field.Kind,
+            Required = !field.IsNullable,
+            Fields = field.Kind == NetSuiteFieldKind.Sublist ? field.SublistFields.Select(ToFieldData).ToList() : null,
+        };
+
+        static NetSuiteFieldDefinition FromFieldData(FieldData field) => new()
+        {
+            RestName = field.Name,
+            Column = field.Name.ToLowerInvariant(),
+            Kind = field.Kind,
+            IsNullable = !field.Required,
+            SublistFields = field.Fields?.Select(FromFieldData).ToList() ?? new(),
+        };
 
         /// <summary>保存してある定義。ファイルが無ければ null。</summary>
         internal static List<NetSuiteRecordDefinition>? Load(string directory, string dataSourceName)
@@ -81,17 +109,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             var records = new List<NetSuiteRecordDefinition>();
             foreach (var record in data?.Records ?? new())
             {
-                var definition = new NetSuiteRecordDefinition { Name = record.Name };
-                foreach (var field in record.Fields)
-                {
-                    definition.Fields.Add(new NetSuiteFieldDefinition
-                    {
-                        RestName = field.Name,
-                        Column = field.Name.ToLowerInvariant(),
-                        Kind = field.Kind,
-                        IsNullable = !field.Required,
-                    });
-                }
+                var definition = new NetSuiteRecordDefinition { Name = record.Name, LineParent = record.Parent, LineSublist = record.Sublist };
+                foreach (var field in record.Fields) definition.Fields.Add(FromFieldData(field));
                 records.Add(definition);
             }
             _cache[path] = (lastWriteTimeUtc, records);

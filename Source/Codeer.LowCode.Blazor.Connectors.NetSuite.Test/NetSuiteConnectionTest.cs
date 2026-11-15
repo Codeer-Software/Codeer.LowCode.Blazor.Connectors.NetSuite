@@ -558,9 +558,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         {
             var connection = Create();
             var definition = await connection.GetRecordDefinitionAsync("customer");
+            var first = _fake.Requests.Count(e => e.IsMetadata);
             await connection.GetRecordDefinitionAsync("CUSTOMER");
             Assert.That(definition.FindByColumn("companyname"), Is.Not.Null);
-            var metadata = _fake.Requests.Where(e => e.IsMetadata).ToList();
+            //2 回目は送らない
+            Assert.That(_fake.Requests.Count(e => e.IsMetadata), Is.EqualTo(first));
+            //明細の $ref の先 (customer-addressBookCollection) を除くと、レコードの定義の 1 回
+            var metadata = _fake.Requests.Where(e => e.IsMetadata && !e.Path.EndsWith("Collection")).ToList();
             Assert.That(metadata, Has.Count.EqualTo(1));
             Assert.That(metadata[0].Method, Is.EqualTo(HttpMethod.Get));
             Assert.That(metadata[0].Url, Is.EqualTo(FakeNetSuite.RestUrl + "/record/v1/metadata-catalog/customer"));

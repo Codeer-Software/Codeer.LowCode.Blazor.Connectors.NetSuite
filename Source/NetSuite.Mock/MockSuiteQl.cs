@@ -159,6 +159,11 @@ namespace NetSuite.Mock
                 if (0 <= after && tokens[after].IsSymbol(".")) continue;
                 if (!isRecord(tokens[next].Name)) throw new MockSqlException($"Record '{tokens[next].Name}' was not found.");
             }
+            //transaction (取引の表・transactionline の親への列) は SQLite の予約語なので引用符を付ける
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                if (tokens[i].IsWord("transaction")) tokens[i] = new(Kind.Quoted, "\"transaction\"");
+            }
 
             var count = tokens.Count(e => e.Kind == Kind.Param);
             if (count != parameterCount)

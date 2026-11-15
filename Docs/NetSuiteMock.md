@@ -7,6 +7,7 @@ NetSuite の実アカウントが無くても、コネクターを組み込ん�
 - 一覧・検索・並び・ページング・件数、リンク越しの表示と検索
 - 集計 (件数・合計・平均・最小・最大、項目・リンク・日付の区切りごと)
 - 新規・更新・空にする・削除と、そのときのエラー (必須の項目が無い・知らない項目・型の合わない値・無い参照先)
+- NetSuite のアカウント (従業員) でのアプリのログイン (OpenID Connect。下記)
 
 データはモックのプロセスの中 (メモリ) だけにあります。止めると、最初のデータに戻ります。
 
@@ -20,7 +21,8 @@ NetSuite の実アカウントが無くても、コネクターを組み込ん�
 dotnet run --project Source/NetSuite.Mock
 ```
 
-`http://localhost:5080` で待ち受けます。ポートやデータを変えるとき:
+`http://localhost:5080` で待ち受けます。ASP.NET Core の開発用証明書 (`dotnet dev-certs https --trust`) があるときは `https://localhost:5081` でも待ち受けます (アプリのログインを試すときに使います)。
+ポートやデータを変えるとき:
 
 ```
 dotnet run --project Source/NetSuite.Mock -- --urls http://localhost:5090 --data C:\work\my-mock-data.json
@@ -28,7 +30,7 @@ dotnet run --project Source/NetSuite.Mock -- --urls http://localhost:5090 --data
 
 | 引数 | 内容 |
 |---|---|
-| `--urls` | 待ち受ける URL。既定 `http://localhost:5080` |
+| `--urls` | 待ち受ける URL (`;` 区切りで複数)。既定 `http://localhost:5080` と、開発用証明書があれば `https://localhost:5081` |
 | `--data` | レコードの定義と初期データのファイル。既定はモックに付いている `mock-data.json` (架空のサンプル) |
 
 終了は Ctrl+C です。
@@ -52,6 +54,34 @@ dotnet run --project Source/NetSuite.Mock -- --urls http://localhost:5090 --data
 - `ClientId`・`CertificateId` は何でもかまいません (モックは確かめません)
 - `PrivateKeyPath` の鍵は、モックが最初の起動のときに実行ファイルの隣に作る使い捨ての鍵 (`mock-key.pem`) です。実アカウントの鍵とは関係ありません。リポジトリには入れません
 - `Records` には、データのファイルに書いたレコードが全部入ります。使うものだけに減らしてもかまいません
+
+## NetSuite のアカウントでログインする (OpenID Connect)
+
+モックは NetSuite の OpenID Connect のプロバイダの代わりもします。アプリの外部ログイン (`OidcLogins`) の `Authority` をモックの https の URL にすると、
+ログイン画面の「NetSuite」のボタンからモックのログイン画面に移り、従業員を選んでログインできます。設定の書き方は [NetSuite.md](NetSuite.md) の「NetSuite のアカウントでログインする」と同じです。
+
+```json
+{
+  "OidcLogins": [
+    {
+      "Name": "NetSuite",
+      "DisplayName": "NetSuite",
+      "ClientId": "mock-client",
+      "ClientSecret": "mock-secret",
+      "Authority": "https://localhost:5081",
+      "Scopes": [ "openid", "email" ],
+      "LoginNameClaim": "email"
+    }
+  ]
+}
+```
+
+- **https が要ります。** ASP.NET Core の OpenID Connect は、プロバイダの設定 (discovery) を https でしか読みません。開発用証明書を信頼済みにしてからモックを起動してください (コンソールに Authority が出ます)
+- `ClientId`・`ClientSecret` は空でなければ何でもかまいません (モックは確かめません)
+- ログイン画面に出るのは、データのファイルの `employee` の行のうち、メール (`email`) があり、無効 (`isInactive`) でない従業員です。キャンセルすると `access_denied` で戻ります
+- 認可コード + PKCE (S256) だけを受け付けます。scope は `openid` と `email` だけ (`email` を付けたときだけ ID トークンに `email` が入ります)
+- ID トークンは PS256 で署名します (鍵は起動のたびに作り直す使い捨て)。中身は `iss` (モックの URL)・`sub` (`<ロールの ID>;<従業員の id>`。ロールは `1111` 固定)・`aud`・`exp`・`iat`・`auth_time`・`nonce`・`at_hash`・`email` です。名前のクレームはありません
+- 認可コードは 1 回だけ・5 分で切れます。`redirect_uri`・クライアント ID は認可の要求と同じでないと通りません
 
 ## データのファイル (mock-data.json)
 
@@ -104,7 +134,50 @@ dotnet run --project Source/NetSuite.Mock -- --urls http://localhost:5090 --data
 - ファイルに誤り (知らない種類・無い参照先・必須の値が無い行など) があると、起動のときにどこが違うかを出して止まります
 - コメント (`//`) と末尾のカンマは書けます
 
-付いている `mock-data.json` は架空のサンプルです: `subsidiary` (3 行)、`customer` (20 行)、`customrecord_sample` (15 行。`customer` への参照を持つ)。
+### 取引と明細
+
+```json
+"salesOrder": {
+  "transactionType": "SalesOrd",
+  "fields": {
+    "entity": { "type": "reference", "record": "customer", "required": true },
+    "tranDate": { "type": "date", "required": true }
+  },
+  "sublists": {
+    "item": {
+      "required": true,
+      "fields": {
+        "item": { "type": "reference", "record": "item", "required": true },
+        "quantity": "number"
+      }
+    }
+  },
+  "rows": [
+    { "id": 1, "entity": { "id": "1" }, "tranDate": "2026-04-01", "item": { "items": [ { "item": { "id": "1" }, "quantity": 10 } ] } }
+  ]
+}
+```
+
+- `transactionType` を書いたレコードは取引です。SuiteQL の `transaction` 表に、取引のレコード全部の行が `type` (この値) の列つきで並びます (項目はどれかの取引にあるもの全部。無い項目は空)。
+  取引のレコードでは `type` を項目名に使えず、`transaction` という名前のレコードは作れません
+- 取引の id は取引のレコード全部で通しで振られ、種類が違っても重なりません (rows に同じ id を書くと起動のときに止まります)
+- `sublists` のキーが明細名、`fields` が行の項目 (書き方はレコードの項目と同じ。`line` は使えません)。`required: true` の明細は、作成で行を 0 行にできず、更新で全部の行を消せません
+- rows の行の明細は `"明細名": { "items": [ ... ] }`。行の番号 (`line`) は書かず、親ごとに 1 から振られます
+
+REST での明細の動き:
+
+- **作成** (POST): 明細を `"明細名": { "items": [ ... ] }` で送ります。行に `line` は書けません
+- **更新** (PATCH): `line` のある行はその行の項目を更新し、`line` の無い行は足します。今の行に無い `line` は 400 で、そのときは何も変わりません。
+  `?replace=明細名` を付けると、送らなかった行を消します。消した行の番号は使い回しません
+- **読み出し** (GET): `?expandSubResources=true` のときだけ行を返します (`line`・項目・links。参照は `{ "id", "refName" }`、refName は参照先のレコードの最初の文字列の項目)。付けなければ明細は links だけです
+- **メタデータ**: 明細は `$ref` (`<レコード名>-<明細名>Collection`) で書き、その先 (…Collection → items → `<レコード名>-<明細名>Element`) も同じ metadata-catalog から読めます
+- **SuiteQL の `transactionline` 表**: 取引の明細の行を全部並べた表です。列は `uniquekey` (行のキー。モックの全部の明細で通しで振り、使い回しません)・
+  `transaction` (親の取引の id)・`id` と `linesequencenumber` (どちらも行の番号 `line`)・`mainline` と `taxline` (いつも `F`)・行の項目の小文字 (どれかの明細にあるもの全部。無い項目は空)。
+  行の項目のうち、名前がこれらの列と同じもの (`id` など) は `transactionline` には出ません
+
+付いている `mock-data.json` は架空のサンプルです: `subsidiary` (3 行)、`customer` (20 行)、`customrecord_sample` (15 行。`customer` への参照を持つ)、
+`item` (5 行)、`salesOrder` (4 行。取引 `SalesOrd`。必須の明細 `item` を持つ)、
+`employee` (5 行。ログインできるのは 3 人。1 人は無効、1 人はメールなし)。
 
 ## 実物と同じとは限らない点
 
@@ -118,8 +191,13 @@ dotnet run --project Source/NetSuite.Mock -- --urls http://localhost:5090 --data
 - **結果の形**: 値はすべて文字列・空の列は省く・真偽は `T` / `F`・キーは小文字、はコネクターの前提どおりに返しています。`TO_CHAR` しない日付・日時は `2026-03-04` / `2026-03-04 05:06:07` の形で返します (NetSuite ではアカウントの表示形式になると考えられます)
 - **時刻帯**: 日時はすべて UTC として持ち、UTC のまま返します。NetSuite が SuiteQL で返す時刻帯は確かめられていません
 - **項目と名前**: SuiteQL の表名 = レコード名、列名 = 項目名の小文字、が常に成り立ちます。NetSuite の標準のレコードでは名前が違う項目があり得ます。項目の定義はデータのファイルに書いたものだけで、NetSuite の標準のレコードの項目とは関係ありません
-- **メタデータ**: JSON Schema は、コネクターが読む部分 (型・形式・参照・必須・表示名) だけを返します。明細・サブレコード・選択肢 (enum)・読み取り専用の印は出しません
+- **メタデータ**: JSON Schema は、コネクターが読む部分 (型・形式・参照・必須・表示名・明細の `$ref`) だけを返します。サブレコード・選択肢 (enum)・読み取り専用の印は出しません。明細の書かれ方 (`$ref` の名前・形) はコネクターの前提どおりで、NetSuite の実際の形は確かめられていません
+- **取引と明細**: `transaction` 表は取引のレコードを並べたものです。NetSuite の `transaction` 表の列・`type` の値とは違うことがあります。
+  `transactionline` 表は明細の行だけを並べたものです。NetSuite の `transactionline` には本体の行 (`mainline = 'T'`)・税の行なども入り、列名が REST の項目名の小文字と同じとは限りません。数量・金額の符号も確かめられていません。
+  明細の `replace`・`line` の振り方・`line` だけの要素の扱いは、コネクターの前提どおりに動かしています
 - **書き込み**: 項目の値の検証は型と必須と参照先の有無だけです。NetSuite の業務ルール・既定値・自動で入る項目 (更新日時など)・読み取り専用の項目は再現しません。エラーのコード (`o:errorCode`) と文言はモックが決めたもので、NetSuite と同じではありません
 - **認証**: トークンの要求は JWT の形と期限 (`exp`) だけを見ます。署名・Client ID・証明書・scope は確かめません。ロールの権限による制限もありません
+- **ログイン (OpenID Connect)**: 公開されている仕様 (PKCE・scope・PS256・`sub` の形) に合わせたものです。実物は ID トークンの `iss` が discovery の `issuer` と違う (`https://system.netsuite.com`) という情報があり、
+  `at_hash` の扱い・返るクレームも確かめられていません。モックの `iss` は discovery の `issuer` (モックの URL) と同じで、`email_verified` は返しません。ログイン画面・ロールの選択・二要素認証は NetSuite のものとは違います
 - **呼び出しの制限**: 同時実行・呼び出し量の制限 (429)、障害 (5xx)、応答の遅れは起きません。コネクターのやり直しの動きはモックでは試せません
 - **データの量**: 1 回の SuiteQL の結果の上限 (100,000 行) は再現しません

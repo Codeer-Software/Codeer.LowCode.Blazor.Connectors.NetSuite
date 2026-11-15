@@ -8,6 +8,11 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "Text": "",
+      "Name": "CurrentUserName",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
       "ResourcePath": "lc_logo_256.png",
       "Name": "LCLogo",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ImageViewerFieldDesign"
@@ -15,6 +20,7 @@
   ],
   "DetailLayouts": {
     "": {
+      "OnAfterInitialization": "DetailLayoutDesign_OnAfterInitialization",
       "Layout": {
         "Name": "",
         "Rows": [
@@ -23,6 +29,18 @@
               {
                 "Layout": {
                   "FieldName": "TitleLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "HorizontalAlignment": "Center"
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "CurrentUserName",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },

@@ -138,8 +138,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         [TestCase("delete from customer")]
         [TestCase("update customer set companyname = 'x'")]
         [TestCase("select id from customer; select id from subsidiary")]
-        [TestCase("select id from employee")]
-        [TestCase("select c.id from customer c join employee e on e.id = c.id")]
+        [TestCase("select id from vendor")]
+        [TestCase("select c.id from customer c join vendor v on v.id = c.id")]
         [TestCase("select name from sqlite_master")]
         [TestCase("select nosuchcolumn from customer")]
         [TestCase("select id from customer where id = ?")]
@@ -239,7 +239,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(schema["properties"]!["subsidiary"]!["properties"]!["id"], Is.Not.Null);
             Assert.That(schema["required"]!.AsArray().Select(e => e!.GetValue<string>()), Is.EquivalentTo(new[] { "companyName", "subsidiary" }));
 
-            using var unknownRequest = new HttpRequestMessage(HttpMethod.Get, "/services/rest/record/v1/metadata-catalog/employee");
+            using var unknownRequest = new HttpRequestMessage(HttpMethod.Get, "/services/rest/record/v1/metadata-catalog/vendor");
             unknownRequest.Headers.Authorization = new("Bearer", token);
             unknownRequest.Headers.Accept.ParseAdd("application/schema+json");
             using var unknown = await _client.SendAsync(unknownRequest);
@@ -264,7 +264,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         public async Task 無いIdと知らないレコードは404()
         {
             var token = await GetTokenAsync(_client);
-            foreach (var (method, path) in new[] { ("GET", "customer/999"), ("PATCH", "customer/999"), ("DELETE", "customer/999"), ("DELETE", "customer/abc"), ("POST", "employee") })
+            foreach (var (method, path) in new[] { ("GET", "customer/999"), ("PATCH", "customer/999"), ("DELETE", "customer/999"), ("DELETE", "customer/abc"), ("POST", "vendor") })
             {
                 using var request = new HttpRequestMessage(new HttpMethod(method), "/services/rest/record/v1/" + path);
                 request.Headers.Authorization = new("Bearer", token);

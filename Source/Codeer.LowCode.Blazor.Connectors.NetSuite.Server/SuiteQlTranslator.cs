@@ -33,6 +33,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         public NetSuiteFieldKind? Kind { get; init; }
         /// <summary>件数・合計などの集計の式。</summary>
         public bool IsNumericExpression { get; init; }
+        /// <summary>明細の列 (<see cref="NetSuiteFieldKind.Sublist"/>) の定義。SuiteQL では読まず、行ごとに REST で読む。</summary>
+        public NetSuiteFieldDefinition? Sublist { get; init; }
     }
 
     class SuiteQlSelect
@@ -42,7 +44,14 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>読む行数 (本体がページングを付けたとき)。null なら全部。</summary>
         public int? Limit { get; init; }
         public int Offset { get; init; }
+        /// <summary>SuiteQL の結果から返す列 (明細の列は除く)。</summary>
         public List<SuiteQlResultColumn> Columns { get; init; } = new();
+        /// <summary>明細の列。行ごとに <see cref="Table"/> のレコードを REST で読んで値にする。</summary>
+        public List<SuiteQlResultColumn> Sublists { get; init; } = new();
+        /// <summary>主表のレコード名 (REST のレコード名)。</summary>
+        public string Table { get; init; } = string.Empty;
+        /// <summary>SuiteQL の結果での主表の internal ID の列名 (明細の列があるとき)。</summary>
+        public string IdSourceName { get; init; } = string.Empty;
     }
 
     class RecordInsert
@@ -263,21 +272,20 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             }
             if (topFrom < 0) throw NotSupported(sql);
 
-            //from / join の別名 → レコード (一番外の階層)
+            //from / join の別名 → レコード (一番外の階層)。allAliases はどの階層かを問わない (明細の列の使われ方を確かめる)
             var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var allAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var mainAlias = string.Empty;
             depth = 0;
             for (var i = topFrom; i < tokens.Count; i++)
             {
                 if (tokens[i].IsSymbol("(")) depth++;
                 else if (tokens[i].IsSymbol(")")) depth--;
-                if (depth != 0 || !(tokens[i].IsWord("from") || tokens[i].IsWord("join"))) continue;
+                if (!(tokens[i].IsWord("from") || tokens[i].IsWord("join"))) continue;
                 if (tokens.Count <= i + 1 || tokens[i + 1].IsSymbol("(")) continue;
-                var table = IdentifierText(tokens[i + 1], sql);
-                var alias = table;
-                var next = i + 2;
-                if (next < tokens.Count && tokens[next].IsWord("as")) next++;
-                if (next < tokens.Count && tokens[next].IsIdentifier && !IsClauseWord(tokens[next])) alias = IdentifierText(tokens[next], sql);
+                var (table, alias, _) = ReadTable(tokens, i, sql);
+                allAliases[alias] = table;
+                if (depth != 0) continue;
                 aliases[alias] = table;
                 if (tokens[i].IsWord("from") && string.IsNullOrEmpty(mainAlias)) mainAlias = alias;
             }
@@ -305,11 +313,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
             var body = new List<SqlToken>();
             body.Add(new(SqlTokenKind.Word, "select"));
+            var sublists = new List<SuiteQlResultColumn>();
+            var idSourceName = string.Empty;
+            var emitted = 0;
             for (var index = 0; index < select.Count; index++)
             {
                 var item = select[index];
                 if (item.Count == 0) throw NotSupported(sql);
-                if (index != 0) body.Add(new(SqlTokenKind.Symbol, ","));
 
                 //別名
                 var alias = string.Empty;
@@ -319,6 +329,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     alias = IdentifierText(item[^1], sql);
                     expression = item.GetRange(0, item.Count - 2);
                 }
+                //別名が無い項目は、本体が書いた式をそのままキーにする
+                var key = string.IsNullOrEmpty(alias) ? ToSql(expression, null, null) : alias;
+                var sourceName = string.IsNullOrEmpty(alias) ? $"nsx{index}" : alias;
 
                 //表.列 ならレコードの項目
                 NetSuiteFieldKind? kind = null;
@@ -329,16 +342,28 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     var field = definition.FindByColumn(expression[2].Text);
                     if (field == null) throw new NetSuiteException($"Record type '{table}' has no field '{expression[2].Text}'.");
                     kind = field.Kind;
+                    var isMain = string.Equals(expression[0].Text, mainAlias, StringComparison.OrdinalIgnoreCase);
+                    if (kind == NetSuiteFieldKind.Sublist)
+                    {
+                        //明細は SuiteQL では読まず、行ごとにレコードを REST で読む。読めるのは主表の明細だけ
+                        if (!isMain) throw SublistNotSupported(table, field);
+                        sublists.Add(new SuiteQlResultColumn { Key = key, Kind = kind, Sublist = field });
+                        continue;
+                    }
+                    if (isMain && field.Column == "id" && string.IsNullOrEmpty(idSourceName)) idSourceName = sourceName;
+                }
+                else
+                {
+                    await CheckNoSublistAsync(expression, allAliases, getDefinition);
                 }
                 var isNumericExpression = kind == null && expression.Count != 0 &&
                     (expression[0].IsWord("count") || expression[0].IsWord("sum") || expression[0].IsWord("avg"));
                 if (kind == null && !isNumericExpression) kind = await GetExpressionKindAsync(expression, aliases, getDefinition);
 
-                var sourceName = string.IsNullOrEmpty(alias) ? $"nsx{index}" : alias;
+                if (emitted++ != 0) body.Add(new(SqlTokenKind.Symbol, ","));
                 columns.Add(new SuiteQlResultColumn
                 {
-                    //別名が無い項目は、本体が書いた式をそのままキーにする
-                    Key = string.IsNullOrEmpty(alias) ? ToSql(expression, null, null) : alias,
+                    Key = key,
                     SourceName = sourceName,
                     Kind = kind,
                     IsNumericExpression = isNumericExpression,
@@ -361,18 +386,32 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 body.Add(new(SqlTokenKind.Word, "as"));
                 body.Add(new(SqlTokenKind.Word, sourceName));
             }
+            //明細の列は、主表の列として select に書かれたときだけ読める (条件・並び・集計・結合先には使えない)
+            await CheckNoSublistAsync(tokens.GetRange(topFrom, tokens.Count - topFrom), allAliases, getDefinition);
+            //明細を読むには行の internal ID が要る。本体が select していなければ足す (結果としては返さない)
+            if (sublists.Count != 0 && string.IsNullOrEmpty(idSourceName))
+            {
+                idSourceName = "nsxid";
+                if (emitted++ != 0) body.Add(new(SqlTokenKind.Symbol, ","));
+                body.AddRange(new SqlToken[]
+                {
+                    new(SqlTokenKind.Word, mainAlias), new(SqlTokenKind.Symbol, "."), new(SqlTokenKind.Word, "id"),
+                    new(SqlTokenKind.Word, "as"), new(SqlTokenKind.Word, idSourceName),
+                });
+            }
             body.AddRange(tokens.GetRange(topFrom, tokens.Count - topFrom));
 
-            //何回かに分けて読んでも順序が変わらないよう、並びの最後に internal ID を足す (件数・集計には足さない)
-            if (topGroupBy < 0 && !columns.Any(e => e.IsNumericExpression) && aliases.TryGetValue(mainAlias, out var mainTable) &&
-                (await getDefinition(mainTable)).FindByColumn("id") != null)
+            //何回かに分けて読んでも順序が変わらないよう、並びの最後に行を一意に指す列 (internal ID・明細の表は uniquekey) を足す (件数・集計には足さない)
+            var keyColumn = aliases.TryGetValue(mainAlias, out var mainTable) ? (await getDefinition(mainTable)).KeyColumn : "id";
+            if (topGroupBy < 0 && !columns.Any(e => e.IsNumericExpression) && !string.IsNullOrEmpty(mainTable) &&
+                (await getDefinition(mainTable)).FindByColumn(keyColumn) != null)
             {
                 var orderBy = topOrderBy < 0 ? new List<SqlToken>() : tokens.GetRange(topOrderBy, tokens.Count - topOrderBy);
                 var hasId = false;
                 for (var i = 0; i + 2 < orderBy.Count; i++)
                 {
                     if (string.Equals(orderBy[i].Text, mainAlias, StringComparison.OrdinalIgnoreCase) && orderBy[i + 1].IsSymbol(".") &&
-                        string.Equals(orderBy[i + 2].Text, "id", StringComparison.OrdinalIgnoreCase)) hasId = true;
+                        string.Equals(orderBy[i + 2].Text, keyColumn, StringComparison.OrdinalIgnoreCase)) hasId = true;
                 }
                 if (!hasId)
                 {
@@ -387,9 +426,18 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     }
                     body.Add(new(SqlTokenKind.Word, mainAlias));
                     body.Add(new(SqlTokenKind.Symbol, "."));
-                    body.Add(new(SqlTokenKind.Word, "id"));
+                    body.Add(new(SqlTokenKind.Word, keyColumn));
                 }
             }
+
+            //取引のレコードは SuiteQL では transaction 表の一部、明細の表は transactionline 表の一部
+            var lineTables = new Dictionary<string, NetSuiteRecordDefinition>(StringComparer.OrdinalIgnoreCase);
+            foreach (var table in allAliases.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var definition = await getDefinition(table);
+                if (definition.IsLineTable) lineTables[table] = definition;
+            }
+            body = ReplaceTransactionTables(body, sql, lineTables);
 
             var parameters = new List<string>();
             return new SuiteQlSelect
@@ -399,7 +447,99 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 Limit = limit,
                 Offset = offset,
                 Columns = columns,
+                Sublists = sublists,
+                Table = aliases.TryGetValue(mainAlias, out var main) ? main : string.Empty,
+                IdSourceName = idSourceName,
             };
+        }
+
+        //from / join の後ろの表と別名。next は別名の次の位置
+        static (string Table, string Alias, int Next) ReadTable(List<SqlToken> tokens, int index, string sql)
+        {
+            var table = IdentifierText(tokens[index + 1], sql);
+            var alias = table;
+            var next = index + 2;
+            if (next < tokens.Count && tokens[next].IsWord("as")) next++;
+            if (next < tokens.Count && tokens[next].IsIdentifier && !IsClauseWord(tokens[next]))
+            {
+                alias = IdentifierText(tokens[next], sql);
+                next++;
+            }
+            return (table, alias, next);
+        }
+
+        static NetSuiteException SublistNotSupported(string table, NetSuiteFieldDefinition field)
+            => new($"The sublist column '{field.Column}' of record type '{table}' can only be read as a column of the main record. It cannot be used in a condition, a sort, an aggregate or a joined record.");
+
+        //式・条件の中に明細の列 (別名.列) があれば例外
+        static async Task CheckNoSublistAsync(List<SqlToken> tokens, Dictionary<string, string> aliases, Func<string, Task<NetSuiteRecordDefinition>> getDefinition)
+        {
+            for (var i = 0; i + 2 < tokens.Count; i++)
+            {
+                if (!tokens[i].IsIdentifier || !tokens[i + 1].IsSymbol(".") || !tokens[i + 2].IsIdentifier) continue;
+                if (!aliases.TryGetValue(tokens[i].Text, out var table)) continue;
+                var field = (await getDefinition(table)).FindByColumn(tokens[i + 2].Text);
+                if (field?.Kind == NetSuiteFieldKind.Sublist) throw SublistNotSupported(table, field);
+            }
+        }
+
+        // ---------------------------------------------------------------- 取引のレコード
+
+        //REST のレコード名 → SuiteQL の transaction 表の type の値
+        static readonly Dictionary<string, string> _transactionTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["salesorder"] = "SalesOrd",
+            ["invoice"] = "CustInvc",
+            ["purchaseorder"] = "PurchOrd",
+            ["estimate"] = "Estimate",
+            ["journalentry"] = "Journal",
+            ["creditmemo"] = "CustCred",
+            ["vendorbill"] = "VendBill",
+            ["cashsale"] = "CashSale",
+            ["customerpayment"] = "CustPymt",
+            ["vendorpayment"] = "VendPymt",
+            ["itemfulfillment"] = "ItemShip",
+            ["itemreceipt"] = "ItemRcpt",
+            ["returnauthorization"] = "RtnAuth",
+            ["vendorcredit"] = "VendCred",
+            ["customerdeposit"] = "CustDep",
+            ["opportunity"] = "Opprtnty",
+        };
+
+        /// <summary>取引のレコードなら transaction 表の type の値。取引でなければ null。</summary>
+        internal static string? GetTransactionType(string recordType) => _transactionTypes.TryGetValue(recordType, out var type) ? type : null;
+
+        //from / join の取引のレコードを (select * from transaction where type = '<種別>') <別名> にする (別名が無ければ表名を別名に)。
+        //明細の表は (select tl.* from transactionline tl inner join transaction t on t.id = tl.transaction where t.type = '<種別>' and tl.mainline = 'F' and tl.taxline = 'F') <別名>
+        static List<SqlToken> ReplaceTransactionTables(List<SqlToken> tokens, string sql, IReadOnlyDictionary<string, NetSuiteRecordDefinition> lineTables)
+        {
+            var result = new List<SqlToken>();
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                result.Add(tokens[i]);
+                if (!(tokens[i].IsWord("from") || tokens[i].IsWord("join")) || tokens.Count <= i + 1 || tokens[i + 1].IsSymbol("(")) continue;
+                var (table, alias, next) = ReadTable(tokens, i, sql);
+                if (lineTables.TryGetValue(table, out var line))
+                {
+                    //種別は組み込みの対応表の値 (利用者の文字列ではない)
+                    var lineType = GetTransactionType(line.LineParent!)!;
+                    result.AddRange(WithoutSpaces(Tokenize(
+                        $"(select tl.* from transactionline tl inner join transaction t on t.id = tl.transaction where t.type = '{lineType}' and tl.mainline = 'F' and tl.taxline = 'F')")));
+                    result.Add(new(SqlTokenKind.Word, alias));
+                    i = next - 1;
+                    continue;
+                }
+                var type = GetTransactionType(table);
+                if (type == null) continue;
+                result.AddRange(new SqlToken[]
+                {
+                    new(SqlTokenKind.Symbol, "("), new(SqlTokenKind.Word, "select"), new(SqlTokenKind.Symbol, "*"), new(SqlTokenKind.Word, "from"),
+                    new(SqlTokenKind.Word, "transaction"), new(SqlTokenKind.Word, "where"), new(SqlTokenKind.Word, "type"), new(SqlTokenKind.Symbol, "="),
+                    new(SqlTokenKind.StringLiteral, type), new(SqlTokenKind.Symbol, ")"), new(SqlTokenKind.Word, alias),
+                });
+                i = next - 1;
+            }
+            return result;
         }
 
         /// <summary>
@@ -569,6 +709,21 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             if (i < tokens.Count && tokens[i].IsSymbol(";")) i++;
             if (i != tokens.Count || list.Count == 0) throw NotSupported(sql);
             return list;
+        }
+
+        /// <summary>書き込み (insert into / update / delete from) の対象の表。読めない形なら空 (形の確かめは読み取りの側でする)。</summary>
+        internal static List<string> GetWriteTables(string sql)
+        {
+            var tokens = WithoutSpaces(Tokenize(sql));
+            var tables = new List<string>();
+            for (var i = 0; i + 1 < tokens.Count; i++)
+            {
+                var target = tokens[i].IsWord("update") ? i + 1 : (tokens[i].IsWord("insert") || tokens[i].IsWord("delete")) && i + 2 < tokens.Count ? i + 2 : -1;
+                if (target < 0 || tokens.Count <= target || !tokens[target].IsIdentifier || !IsIdentifier(tokens[target].Text)) continue;
+                if (target == i + 2 && !(tokens[i + 1].IsWord("into") || tokens[i + 1].IsWord("from"))) continue;
+                tables.Add(tokens[target].Text);
+            }
+            return tables;
         }
 
         internal static bool IsUpdate(string sql) => WithoutSpaces(Tokenize(sql)).FirstOrDefault()?.IsWord("update") == true;

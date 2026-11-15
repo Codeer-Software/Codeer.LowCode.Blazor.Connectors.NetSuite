@@ -36,14 +36,42 @@ namespace NetSuite.Mock
         public string Title { get; init; } = string.Empty;
     }
 
+    /// <summary>明細 (行キー line を持つサブリスト) 1 つの定義。</summary>
+    public sealed class MockSublist
+    {
+        /// <summary>REST の項目名 (例: item)。</summary>
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary>1 行以上が要る (作成・更新で行を 0 にできない)。</summary>
+        public bool Required { get; init; }
+
+        /// <summary>行の項目 (line は含まない。line は親ごとに 1 からの連番で自動で付く)。</summary>
+        public List<MockField> Fields { get; } = new();
+
+        public MockField? FindField(string name) => Fields.FirstOrDefault(e => e.Name == name);
+    }
+
     /// <summary>レコード種別 1 つの定義。</summary>
     public sealed class MockRecordType
     {
         public string Name { get; init; } = string.Empty;
         public List<MockField> Fields { get; } = new();
 
+        /// <summary>取引のレコードなら SuiteQL の transaction 表の type の値 (例: SalesOrd)。取引でなければ空。</summary>
+        public string TransactionType { get; init; } = string.Empty;
+
+        public bool IsTransaction => !string.IsNullOrEmpty(TransactionType);
+
+        /// <summary>明細。</summary>
+        public List<MockSublist> Sublists { get; } = new();
+
         /// <summary>REST の項目名で探す (大文字・小文字を区別する)。</summary>
         public MockField? FindField(string name) => Fields.FirstOrDefault(e => e.Name == name);
+
+        public MockSublist? FindSublist(string name) => Sublists.FirstOrDefault(e => e.Name == name);
+
+        /// <summary>明細の行を持つ SQLite の表 (parent = 親の id・line・行の項目)。SuiteQL からは読めない。</summary>
+        internal string SublistTable(MockSublist sublist) => $"sublist_{Name}_{sublist.Name}";
 
         internal static bool IsIdentifier(string text)
             => !string.IsNullOrEmpty(text) && (char.IsAsciiLetter(text[0]) || text[0] == '_') && text.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
@@ -213,45 +241,36 @@ namespace NetSuite.Mock
                 if (record.Value.ValueKind != JsonValueKind.Object || !record.Value.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Object)
                     throw new InvalidDataException($"mock data: record '{record.Name}' needs \"fields\": {{ ... }}.");
 
-                var type = new MockRecordType { Name = record.Name };
-                foreach (var field in fields.EnumerateObject())
+                var transactionType = string.Empty;
+                if (record.Value.TryGetProperty("transactionType", out var transaction))
                 {
-                    var where = $"mock data: field '{record.Name}.{field.Name}'";
-                    if (!MockRecordType.IsIdentifier(field.Name)) throw new InvalidDataException($"{where}: letters, digits and _ only.");
-                    if (string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException($"{where}: 'id' is added automatically.");
-                    if (type.Fields.Any(e => e.Column == field.Name.ToLowerInvariant())) throw new InvalidDataException($"{where}: the name is used twice (names are compared in lower case).");
+                    if (transaction.ValueKind != JsonValueKind.String || !MockRecordType.IsIdentifier(transaction.GetString()!))
+                        throw new InvalidDataException($"mock data: \"transactionType\" of record '{record.Name}' must be a name (letters, digits and _ only), e.g. \"SalesOrd\".");
+                    transactionType = transaction.GetString()!;
+                    if (list.Any(e => e.TransactionType == transactionType))
+                        throw new InvalidDataException($"mock data: transactionType '{transactionType}' is used twice.");
+                }
 
-                    string typeName;
-                    bool required = false;
-                    string target = string.Empty, title = string.Empty;
-                    if (field.Value.ValueKind == JsonValueKind.String)
+                var type = new MockRecordType { Name = record.Name, TransactionType = transactionType };
+                ReadFields($"mock data: field '{record.Name}", fields, type.Fields, transactionType.Length != 0 ? "type" : null);
+
+                if (record.Value.TryGetProperty("sublists", out var sublists))
+                {
+                    if (sublists.ValueKind != JsonValueKind.Object) throw new InvalidDataException($"mock data: \"sublists\" of record '{record.Name}' must be an object.");
+                    foreach (var sublist in sublists.EnumerateObject())
                     {
-                        typeName = field.Value.GetString()!;
+                        var where = $"mock data: sublist '{record.Name}.{sublist.Name}'";
+                        if (!MockRecordType.IsIdentifier(sublist.Name)) throw new InvalidDataException($"{where}: letters, digits and _ only.");
+                        if (type.Fields.Any(e => e.Column == sublist.Name.ToLowerInvariant()) || type.Sublists.Any(e => e.Name.ToLowerInvariant() == sublist.Name.ToLowerInvariant()) ||
+                            string.Equals(sublist.Name, "id", StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException($"{where}: the name is used twice (names are compared in lower case).");
+                        if (sublist.Value.ValueKind != JsonValueKind.Object || !sublist.Value.TryGetProperty("fields", out var sublistFields) || sublistFields.ValueKind != JsonValueKind.Object)
+                            throw new InvalidDataException($"{where}: needs \"fields\": {{ ... }}.");
+                        var required = sublist.Value.TryGetProperty("required", out var r) && r.ValueKind == JsonValueKind.True;
+                        var definition = new MockSublist { Name = sublist.Name, Required = required };
+                        ReadFields($"mock data: field '{record.Name}.{sublist.Name}", sublistFields, definition.Fields, "line");
+                        type.Sublists.Add(definition);
                     }
-                    else if (field.Value.ValueKind == JsonValueKind.Object && field.Value.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String)
-                    {
-                        typeName = t.GetString()!;
-                        if (field.Value.TryGetProperty("required", out var r)) required = r.ValueKind == JsonValueKind.True;
-                        if (field.Value.TryGetProperty("record", out var rec) && rec.ValueKind == JsonValueKind.String) target = rec.GetString()!;
-                        if (field.Value.TryGetProperty("title", out var ti) && ti.ValueKind == JsonValueKind.String) title = ti.GetString()!;
-                    }
-                    else
-                    {
-                        throw new InvalidDataException($"{where}: write {{ \"type\": \"string\" }} (or just \"string\").");
-                    }
-                    MockFieldType kind = typeName switch
-                    {
-                        "string" => MockFieldType.String,
-                        "boolean" => MockFieldType.Boolean,
-                        "integer" => MockFieldType.Integer,
-                        "number" => MockFieldType.Number,
-                        "date" => MockFieldType.Date,
-                        "dateTime" => MockFieldType.DateTime,
-                        "reference" => MockFieldType.Reference,
-                        _ => throw new InvalidDataException($"{where}: unknown type '{typeName}' (string / boolean / integer / number / date / dateTime / reference)."),
-                    };
-                    if (kind == MockFieldType.Reference && string.IsNullOrEmpty(target)) throw new InvalidDataException($"{where}: a reference needs \"record\": \"<record name>\".");
-                    type.Fields.Add(new MockField { Name = field.Name, Type = kind, Record = target, Required = required, Title = title });
                 }
                 list.Add(type);
 
@@ -264,13 +283,61 @@ namespace NetSuite.Mock
 
             foreach (var type in list)
             {
-                foreach (var field in type.Fields.Where(e => e.Type == MockFieldType.Reference))
+                foreach (var (owner, field) in type.Fields.Select(e => (type.Name, e)).Concat(type.Sublists.SelectMany(s => s.Fields.Select(e => ($"{type.Name}.{s.Name}", e)))))
                 {
+                    if (field.Type != MockFieldType.Reference) continue;
                     if (!list.Any(e => string.Equals(e.Name, field.Record, StringComparison.OrdinalIgnoreCase)))
-                        throw new InvalidDataException($"mock data: field '{type.Name}.{field.Name}' refers to record '{field.Record}', which is not defined.");
+                        throw new InvalidDataException($"mock data: field '{owner}.{field.Name}' refers to record '{field.Record}', which is not defined.");
                 }
             }
+            if (list.Any(e => e.IsTransaction) && list.Any(e => string.Equals(e.Name, "transaction", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("mock data: 'transaction' cannot be used as a record name when there are transaction records (it is the SuiteQL table of them).");
             return list;
+        }
+
+        //項目の定義 ("fields")。reserved は使えない名前 (取引の type・明細の line)
+        static void ReadFields(string prefix, JsonElement fields, List<MockField> list, string? reserved)
+        {
+            foreach (var field in fields.EnumerateObject())
+            {
+                var where = $"{prefix}.{field.Name}'";
+                if (!MockRecordType.IsIdentifier(field.Name)) throw new InvalidDataException($"{where}: letters, digits and _ only.");
+                if (string.Equals(field.Name, "id", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException($"{where}: 'id' is added automatically.");
+                if (reserved != null && string.Equals(field.Name, reserved, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException($"{where}: '{reserved}' is reserved.");
+                if (list.Any(e => e.Column == field.Name.ToLowerInvariant())) throw new InvalidDataException($"{where}: the name is used twice (names are compared in lower case).");
+
+                string typeName;
+                bool required = false;
+                string target = string.Empty, title = string.Empty;
+                if (field.Value.ValueKind == JsonValueKind.String)
+                {
+                    typeName = field.Value.GetString()!;
+                }
+                else if (field.Value.ValueKind == JsonValueKind.Object && field.Value.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String)
+                {
+                    typeName = t.GetString()!;
+                    if (field.Value.TryGetProperty("required", out var r)) required = r.ValueKind == JsonValueKind.True;
+                    if (field.Value.TryGetProperty("record", out var rec) && rec.ValueKind == JsonValueKind.String) target = rec.GetString()!;
+                    if (field.Value.TryGetProperty("title", out var ti) && ti.ValueKind == JsonValueKind.String) title = ti.GetString()!;
+                }
+                else
+                {
+                    throw new InvalidDataException($"{where}: write {{ \"type\": \"string\" }} (or just \"string\").");
+                }
+                MockFieldType kind = typeName switch
+                {
+                    "string" => MockFieldType.String,
+                    "boolean" => MockFieldType.Boolean,
+                    "integer" => MockFieldType.Integer,
+                    "number" => MockFieldType.Number,
+                    "date" => MockFieldType.Date,
+                    "dateTime" => MockFieldType.DateTime,
+                    "reference" => MockFieldType.Reference,
+                    _ => throw new InvalidDataException($"{where}: unknown type '{typeName}' (string / boolean / integer / number / date / dateTime / reference)."),
+                };
+                if (kind == MockFieldType.Reference && string.IsNullOrEmpty(target)) throw new InvalidDataException($"{where}: a reference needs \"record\": \"<record name>\".");
+                list.Add(new MockField { Name = field.Name, Type = kind, Record = target, Required = required, Title = title });
+            }
         }
     }
 }

@@ -1,0 +1,538 @@
+[
+  {
+    "id": "S01",
+    "publisher": "Oracle",
+    "title": "Working with Sublists",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_1545142407.html",
+    "relevance": "K2/K3/K9：keyed・non-keyed、単独削除の制約",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S02",
+    "publisher": "Oracle",
+    "title": "Updating a Sublist",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1545295601.html",
+    "relevance": "K2/K5：既定PATCH、204応答",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S03",
+    "publisher": "Oracle",
+    "title": "Replacing a Sublist",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1545297048.html",
+    "relevance": "K2/K3：replaceの動作",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S04",
+    "publisher": "Oracle",
+    "title": "Use Case For Updating Your Sales Order",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159795512874.html",
+    "relevance": "K2/K3：line更新、キー省略追加、削除の置換",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S05",
+    "publisher": "Oracle",
+    "title": "Invoice",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_161488248489.html",
+    "relevance": "K1/K3/K4：item以外の作成、税、line更新",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S06",
+    "publisher": "Oracle",
+    "title": "Purchase Order",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_161165602348.html",
+    "relevance": "K1/K4：item公開範囲の説明と例が矛盾",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S07",
+    "publisher": "Oracle",
+    "title": "Journal Entry",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159886587653.html",
+    "relevance": "K1：RESTの作成構造と機能制限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S08",
+    "publisher": "Oracle",
+    "title": "Use Case for Updating Line Items in a Journal Entry",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_0224115029.html",
+    "relevance": "K1/K4：更新時の貸借均衡",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S09",
+    "publisher": "Oracle",
+    "title": "Journal Entry Body and Sublist Fields",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4099136433.html",
+    "relevance": "K1：最低2行等のレコード規則。SOAP側資料でありREST実測ではない",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S10",
+    "publisher": "Oracle",
+    "title": "Adding Items on a Sales Transaction",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4588373194.html",
+    "relevance": "K1：販売取引の明細要件",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S11",
+    "publisher": "Oracle",
+    "title": "Estimate",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0719105836.html",
+    "relevance": "K1：見積のRESTレコード",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S12",
+    "publisher": "Oracle",
+    "title": "Accessing Subresources in REST Web Services",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159894563219.html",
+    "relevance": "K6/K7：GETパス、独立作成・直接削除の制約",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S13",
+    "publisher": "Oracle",
+    "title": "Working with Subrecords",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_156337267817.html",
+    "relevance": "K7：サブレコードの親コンテキスト",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S14",
+    "publisher": "Oracle",
+    "title": "Using CRUD Operations on Custom Records, Custom Lists, and Custom Transactions v1",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158100110171.html",
+    "relevance": "K8/N5：独立カスタム子CRUD、カスタムリスト",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S15",
+    "publisher": "Oracle",
+    "title": "Using the REST Web Services SuiteScript Execution Context",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157927488310.html",
+    "relevance": "K4/L1：REST起点のスクリプトと履歴",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S16",
+    "publisher": "Oracle",
+    "title": "Working with Resource Metadata",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_1540810168.html",
+    "relevance": "K/N：動的スキーマ、enum、OpenAPI、ロール別メタデータ",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S17",
+    "publisher": "Oracle",
+    "title": "Creating a Record Instance",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1545141395.html",
+    "relevance": "K5：204とLocation。一般説明を他の専用機能へ無条件に拡張しない",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S18",
+    "publisher": "Oracle",
+    "title": "selectOptions Operation",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0115100241.html",
+    "relevance": "N1/N5：専用Accept、候補、入力依存、検索、ページング",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S19",
+    "publisher": "Oracle",
+    "title": "Executing Record Actions",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156631158782.html",
+    "relevance": "N2：@形式、200例、メタデータなし",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S20",
+    "publisher": "Oracle",
+    "title": "Supported Record Actions",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1516982564.html",
+    "relevance": "N2：型別対応Actionの一覧",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S21",
+    "publisher": "Oracle",
+    "title": "Time Actions",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1529337353.html",
+    "relevance": "N2：approve、必要パラメーター、SuiteScript側結果",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S22",
+    "publisher": "Oracle",
+    "title": "Use Case For Approving Your Sales Order",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_159795516182.html",
+    "relevance": "N2：orderStatus A/BのPATCH",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S23",
+    "publisher": "Oracle",
+    "title": "Transforming Records",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157901123882.html",
+    "relevance": "N3：変換URL、204、本文での上書き",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S24",
+    "publisher": "Oracle",
+    "title": "record.transform(options)",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4267258715.html",
+    "relevance": "N3：対応変換表。REST公開条件も別途必要",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S25",
+    "publisher": "Oracle",
+    "title": "Using Saved Search in REST Web Services",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0804090827.html",
+    "relevance": "N4：保存検索REST、応答、定義編集・条件上書き不可",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S26",
+    "publisher": "Oracle",
+    "title": "Working with SuiteAnalytics Datasets in REST Web Services",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156577938018.html",
+    "relevance": "N4：Dataset結果、列名、メタデータなし",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S27",
+    "publisher": "Oracle",
+    "title": "Collection Paging",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156414087576.html",
+    "relevance": "N4：limit/offsetと一般のページング上限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S28",
+    "publisher": "Oracle",
+    "title": "Executing SuiteQL Queries Through REST Web Services",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157909186990.html",
+    "relevance": "K5/L3/N4：SuiteQL、バインド変数、100,000件上限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S29",
+    "publisher": "Oracle",
+    "title": "SuiteTalk Web Services Integration — 2026.2 Release Notes",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N3950559.html",
+    "relevance": "0：バインド変数等の現行追加",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S30",
+    "publisher": "Oracle",
+    "title": "Viewing Transaction System Notes",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N555355.html",
+    "relevance": "L1：Set by、変更履歴、作成履歴の設定",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S31",
+    "publisher": "Oracle",
+    "title": "Searching System Notes",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N673560.html",
+    "relevance": "L3：通常System Notesと削除、v2保持",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S32",
+    "publisher": "Oracle",
+    "title": "Viewing System Notes in Analytics Data Source",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_96115732745.html",
+    "relevance": "L3/M3：全履歴権限、自身のみの結果、スキーマ差",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S33",
+    "publisher": "Oracle",
+    "title": "System Notes and System Notes v2",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_160225379741.html",
+    "relevance": "L3：両システムの対象・削除履歴の差",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S34",
+    "publisher": "Oracle",
+    "title": "Using the REST Web Services Execution Log",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156570320384.html",
+    "relevance": "L4：閲覧場所・保存項目。保持日数は当該本文に記載なし",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S35",
+    "publisher": "Oracle",
+    "title": "OAuth 2.0 Client Credentials Setup",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_162686838198.html",
+    "relevance": "M2：Entity/Role/Applicationマッピング、証明書数、環境差",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S36",
+    "publisher": "Oracle",
+    "title": "Certificate Conditions",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_162755332391.html",
+    "relevance": "M2：組合せごとの証明書",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S37",
+    "publisher": "Oracle",
+    "title": "Step Two POST Request to the Token Endpoint",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_158081952044.html",
+    "relevance": "M1：Authorization Codeとトークン期限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S38",
+    "publisher": "Oracle",
+    "title": "Set Up OAuth 2.0 Roles",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157771510070.html",
+    "relevance": "M1：OAuth利用権限と管理権限の区別",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S39",
+    "publisher": "Oracle",
+    "title": "SuiteQL",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_156257770590.html",
+    "relevance": "M3：Workbookと同じロール制限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S40",
+    "publisher": "Oracle",
+    "title": "How NetSuite Counts User Licenses",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0304103142.html",
+    "relevance": "M1：ロール・ログインメールによる計数",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S41",
+    "publisher": "CData",
+    "title": "ADO.NET Provider for NetSuite — Tables (Build 25.0.9539)",
+    "url": "https://cdn.cdata.com/help/DNM/ado/pg_suitetalktableinfo.htm",
+    "relevance": "P1/P2：子表、DML、親INSERTへの集約",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S42",
+    "publisher": "CData",
+    "title": "Inserting Parent and Child Records",
+    "url": "https://cdn.cdata.com/help/DNK/rcmd/pg_deepinsert.htm",
+    "relevance": "P1：#TEMPとAggregate。一般例とNetSuite XMLの区別",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S43",
+    "publisher": "Celigo",
+    "title": "Import NetSuite line items",
+    "url": "https://docs.celigo.com/hc/en-us/articles/360052710532-Import-NetSuite-line-items",
+    "relevance": "P1：サブリストマッピング、行照合、置換",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S44",
+    "publisher": "Workato",
+    "title": "NetSuite SOAP — Update object action",
+    "url": "https://docs.workato.com/en/connectors/netsuite/netsuite-update-object-action.html",
+    "relevance": "P1：入れ子リスト、Replace all。SOAP資料",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S45",
+    "publisher": "Workato",
+    "title": "NetSuite REST — Connection setup",
+    "url": "https://docs.workato.com/en/connectors/netsuite-rest/connect.html",
+    "relevance": "P4/M1：M2Mと利用者別Authorization Code",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S46",
+    "publisher": "Boomi",
+    "title": "NetSuite operation",
+    "url": "https://help.boomi.com/docs/Atomsphere/Integration/Connectors/r-atm-NetSuite_operation_8c774e1e-5b05-4a8b-ab5a-2cfcb6ed918a",
+    "relevance": "P1/P3：XMLプロファイル、明細、Get Select Value",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S47",
+    "publisher": "MuleSoft",
+    "title": "NetSuite Connector 13.0 Reference",
+    "url": "https://docs.mulesoft.com/netsuite-connector/latest/netsuite-reference",
+    "relevance": "P1/P3：レコード操作、Get Select Value",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S48",
+    "publisher": "Oracle",
+    "title": "SuiteAnalytics Connect",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/chapter_3963845427.html",
+    "relevance": "P1：読み取り専用。現行NetSuite2.com",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S49",
+    "publisher": "Google Cloud",
+    "title": "Collect Oracle NetSuite logs — Google Security Operations",
+    "url": "https://docs.cloud.google.com/chronicle/docs/ingestion/default-parsers/oracle-netsuite",
+    "relevance": "L3：実装者の一次資料。SystemNoteのREST SuiteQL例と列名",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S50",
+    "publisher": "Oracle",
+    "title": "getDeleted — SOAP to REST migration",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0701101315.html",
+    "relevance": "L3：deletedrecordへのSuiteQL例",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S51",
+    "publisher": "Oracle",
+    "title": "Getting the Result of an Executed Request",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_161252889998.html",
+    "relevance": "N5：entityStatusのcustomerstatus参照例",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S52",
+    "publisher": "Oracle",
+    "title": "query.Type",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1510878994.html",
+    "relevance": "N5：CUSTOM_LISTは個別候補表スキーマの保証ではない",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S53",
+    "publisher": "Oracle",
+    "title": "Conventions for Naming Custom Objects",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_162428958352.html",
+    "relevance": "K5/L2/N5：custcol/custbody/customlistの区分",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S54",
+    "publisher": "Oracle",
+    "title": "Inventory Item",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_161522936052.html",
+    "relevance": "K3/K6：価格サブリストへの複合キーPATCH例",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S55",
+    "publisher": "Salesforce",
+    "title": "Design an Effective Salesforce NetSuite Flow",
+    "url": "https://trailhead.salesforce.com/fr/content/learn/modules/netsuite-data-sync-with-mulesoft-composer/design-a-flow-22",
+    "relevance": "P1：MuleSoft ComposerのSales Order＋Item List入力",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S56",
+    "publisher": "Oracle",
+    "title": "Record Types and Fields",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_164312261929.html",
+    "relevance": "K5/M3：Analyticsの公開データと権限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S57",
+    "publisher": "Oracle",
+    "title": "query.runSuiteQL(options)",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157960542026.html",
+    "relevance": "M3：metaDataProviderはN/queryの設定",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S58",
+    "publisher": "Oracle",
+    "title": "September Monthly Release — 2026.2",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_42174309908.html",
+    "relevance": "0/N4：保存検索RESTの追加",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S59",
+    "publisher": "Oracle",
+    "title": "NetSuite Service Tier Structure",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/subsect_159162378384.html",
+    "relevance": "K4：同時実行枠とSuiteCloud Plus",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S60",
+    "publisher": "Oracle",
+    "title": "Inbound Shipment",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_7165449964.html",
+    "relevance": "K5：PO lineuniquekeyの別用途",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S61",
+    "publisher": "Oracle",
+    "title": "Use Case — Adding an Employee Address",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1208042345.html",
+    "relevance": "K7：親PATCHでの住所追加の類例",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S62",
+    "publisher": "Workato",
+    "title": "NetSuite REST — Create record action",
+    "url": "https://docs.workato.com/en/connectors/netsuite-rest/create-record-action",
+    "relevance": "P1/P2：レコード種別選択と親ID",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S63",
+    "publisher": "Workato",
+    "title": "NetSuite REST — Update record action",
+    "url": "https://docs.workato.com/en/connectors/netsuite-rest/update-record-action",
+    "relevance": "P1：親レコード操作",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S64",
+    "publisher": "Oracle",
+    "title": "Understanding the Context for Changes",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4032860783.html",
+    "relevance": "L1：連鎖処理のContext",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S65",
+    "publisher": "Oracle",
+    "title": "Searching for Deleted Records",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4031815869.html",
+    "relevance": "L3：削除記録とデータソース・機能条件",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S66",
+    "publisher": "Oracle",
+    "title": "Prerequisites and Setup for REST Web Services",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_5085602973.html",
+    "relevance": "M1：REST/Workbook有効化と権限",
+    "accessed": "2026-11-14"
+  },
+  {
+    "id": "S67",
+    "publisher": "Oracle",
+    "title": "User Licenses",
+    "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0304102503.html",
+    "relevance": "M1：利用に適合するライセンスが必要",
+    "accessed": "2026-11-14"
+  }
+]

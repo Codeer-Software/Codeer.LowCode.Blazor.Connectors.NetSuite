@@ -74,6 +74,90 @@
         { "id": 14, "name": "Order A-014", "custrecord_quantity": 7, "custrecord_amount": 840, "custrecord_customer": { "id": "1" }, "custrecord_done": false },
         { "id": 15, "name": "Order A-015", "custrecord_quantity": 11, "custrecord_amount": 1650, "custrecord_date": "2026-05-06", "custrecord_customer": { "id": "12" }, "custrecord_status": "open", "custrecord_done": false, "custrecord_recorded": "2026-05-06T07:45:00Z" }
       ]
+    },
+    "item": {
+      "fields": {
+        "itemId": { "type": "string", "required": true, "title": "Item Name/Number" },
+        "displayName": { "type": "string", "title": "Display Name" },
+        "basePrice": { "type": "number", "title": "Base Price" },
+        "isInactive": { "type": "boolean", "title": "Inactive" }
+      },
+      "rows": [
+        { "id": 1, "itemId": "WIDGET-S", "displayName": "Widget Small", "basePrice": 120, "isInactive": false },
+        { "id": 2, "itemId": "WIDGET-L", "displayName": "Widget Large", "basePrice": 350, "isInactive": false },
+        { "id": 3, "itemId": "GADGET", "displayName": "Gadget", "basePrice": 980.5, "isInactive": false },
+        { "id": 4, "itemId": "CABLE-1M", "displayName": "Cable 1m", "basePrice": 15, "isInactive": false },
+        { "id": 5, "itemId": "OLD-PART", "displayName": "Old Part", "basePrice": 40, "isInactive": true }
+      ]
+    },
+    "salesOrder": {
+      "transactionType": "SalesOrd",
+      "fields": {
+        "entity": { "type": "reference", "record": "customer", "required": true, "title": "Customer" },
+        "tranDate": { "type": "date", "required": true, "title": "Date" },
+        "memo": { "type": "string", "title": "Memo" },
+        "otherRefNum": { "type": "string", "title": "PO #" }
+      },
+      "sublists": {
+        "item": {
+          "required": true,
+          "fields": {
+            "item": { "type": "reference", "record": "item", "required": true, "title": "Item" },
+            "quantity": { "type": "number", "title": "Quantity" },
+            "rate": { "type": "number", "title": "Rate" },
+            "amount": { "type": "number", "title": "Amount" },
+            "description": { "type": "string", "title": "Description" },
+            "expectedShipDate": { "type": "date", "title": "Expected Ship Date" }
+          }
+        }
+      },
+      "rows": [
+        {
+          "id": 1, "entity": { "id": "1" }, "tranDate": "2026-04-01", "memo": "First order", "otherRefNum": "PO-1001",
+          "item": { "items": [
+            { "item": { "id": "1" }, "quantity": 10, "rate": 120, "amount": 1200, "description": "Widget Small", "expectedShipDate": "2026-04-10" },
+            { "item": { "id": "4" }, "quantity": 5, "rate": 15, "amount": 75, "description": "Cable 1m" }
+          ] }
+        },
+        {
+          "id": 2, "entity": { "id": "2" }, "tranDate": "2026-04-15", "memo": "Repeat order",
+          "item": { "items": [
+            { "item": { "id": "2" }, "quantity": 2, "rate": 350, "amount": 700, "description": "Widget Large", "expectedShipDate": "2026-04-30" }
+          ] }
+        },
+        {
+          "id": 3, "entity": { "id": "3" }, "tranDate": "2026-05-02", "memo": "Gadgets", "otherRefNum": "PO-2002",
+          "item": { "items": [
+            { "item": { "id": "3" }, "quantity": 1, "rate": 980.5, "amount": 980.5, "description": "Gadget", "expectedShipDate": "2026-05-20" },
+            { "item": { "id": "1" }, "quantity": 4, "rate": 110, "amount": 440, "description": "Widget Small (discount)" },
+            { "item": { "id": "4" }, "quantity": 3, "rate": 15, "amount": 45 }
+          ] }
+        },
+        {
+          "id": 4, "entity": { "id": "1" }, "tranDate": "2026-05-20", "memo": "Spare parts",
+          "item": { "items": [
+            { "item": { "id": "4" }, "quantity": 20, "rate": 14, "amount": 280, "description": "Cable 1m", "expectedShipDate": "2026-06-01" }
+          ] }
+        }
+      ]
+    },
+    "employee": {
+      "fields": {
+        "entityId": { "type": "string", "required": true, "title": "Name" },
+        "firstName": { "type": "string", "title": "First Name" },
+        "lastName": { "type": "string", "title": "Last Name" },
+        "email": { "type": "string", "title": "Email" },
+        "title": { "type": "string", "title": "Job Title" },
+        "isInactive": { "type": "boolean", "title": "Inactive" },
+        "subsidiary": { "type": "reference", "record": "subsidiary", "required": true, "title": "Subsidiary" }
+      },
+      "rows": [
+        { "id": 1, "entityId": "Ichiro Sato", "firstName": "Ichiro", "lastName": "Sato", "email": "ichiro.sato@example.com", "title": "Sales Manager", "isInactive": false, "subsidiary": { "id": "2" } },
+        { "id": 2, "entityId": "Hanako Suzuki", "firstName": "Hanako", "lastName": "Suzuki", "email": "hanako.suzuki@example.com", "title": "Accountant", "isInactive": false, "subsidiary": { "id": "2" } },
+        { "id": 3, "entityId": "Emily Brown", "firstName": "Emily", "lastName": "Brown", "email": "emily.brown@example.com", "title": "Sales Representative", "isInactive": false, "subsidiary": { "id": "3" } },
+        { "id": 4, "entityId": "Kenji Takahashi", "firstName": "Kenji", "lastName": "Takahashi", "email": "kenji.takahashi@example.com", "title": "Engineer", "isInactive": true, "subsidiary": { "id": "1" } },
+        { "id": 5, "entityId": "Yuki Tanaka", "firstName": "Yuki", "lastName": "Tanaka", "title": "Warehouse Staff", "isInactive": false, "subsidiary": { "id": "1" } }
+      ]
     }
   }
 }

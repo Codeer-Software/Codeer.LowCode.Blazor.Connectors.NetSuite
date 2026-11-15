@@ -161,11 +161,12 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
     public sealed class RecordingHandler : DelegatingHandler
     {
         readonly object _lock = new();
-        readonly List<(HttpMethod Method, string Path, string Body)> _requests = new();
+        readonly List<(HttpMethod Method, string Path, string Body, string Query)> _requests = new();
 
         public RecordingHandler(HttpMessageHandler inner) : base(inner) { }
 
-        public List<(HttpMethod Method, string Path, string Body)> Requests
+        /// <summary>Query は ? からの文字 (無ければ空)。</summary>
+        public List<(HttpMethod Method, string Path, string Body, string Query)> Requests
         {
             get { lock (_lock) return _requests.ToList(); }
         }
@@ -178,7 +179,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content == null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
-            lock (_lock) _requests.Add((request.Method, request.RequestUri!.AbsolutePath, body));
+            lock (_lock) _requests.Add((request.Method, request.RequestUri!.AbsolutePath, body, Uri.UnescapeDataString(request.RequestUri!.Query)));
             return await base.SendAsync(request, cancellationToken);
         }
     }

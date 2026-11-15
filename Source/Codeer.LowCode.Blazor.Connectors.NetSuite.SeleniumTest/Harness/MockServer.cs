@@ -10,6 +10,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
     /// <summary>
     /// モックを Kestrel で 127.0.0.1 の空きポートに立てる (Web アプリは別プロセスなので実ポートで待ち受ける)。
     /// データはテストのプロセスの中 (Mock) にあり、テストは画面の操作の結果をここで確かめる。
+    /// NetSuite のアカウントでのログイン (OpenID Connect) を試すときは https でも待ち受ける (ASP.NET Core の OpenID Connect はメタデータを https でしか読まない)。
+    /// https は ASP.NET Core の開発用証明書 (dotnet dev-certs https --trust) を使う。
     /// </summary>
     public sealed class MockServer : IAsyncDisposable
     {
@@ -17,28 +19,32 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
 
         public MockNetSuite Mock { get; }
         public string ServiceUrl { get; }
+        /// <summary>OpenID Connect の Authority (https で立てたときだけ。それ以外は空)。</summary>
+        public string OidcAuthority { get; }
 
-        public const string Records = "subsidiary,customer,customrecord_sample";
+        public const string Records = "subsidiary,customer,customrecord_sample,employee,item,salesorder";
 
-        MockServer(WebApplication app, MockNetSuite mock, string serviceUrl)
+        MockServer(WebApplication app, MockNetSuite mock, string serviceUrl, string oidcAuthority)
         {
             _app = app;
             Mock = mock;
             ServiceUrl = serviceUrl;
+            OidcAuthority = oidcAuthority;
         }
 
-        /// <summary>付いている mock-data.json の初期データで起動する。</summary>
-        public static async Task<MockServer> StartAsync()
+        /// <summary>付いている mock-data.json の初期データで起動する。https = OpenID Connect 用に https://localhost でも待ち受ける。</summary>
+        public static async Task<MockServer> StartAsync(bool https = false)
         {
             var mock = MockNetSuite.FromFile(Path.Combine(AppContext.BaseDirectory, "mock-data.json"));
             var serviceUrl = $"http://127.0.0.1:{FreePort.Get()}";
+            var oidcAuthority = https ? $"https://localhost:{FreePort.Get()}" : string.Empty;
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
-            builder.WebHost.UseUrls(serviceUrl);
+            builder.WebHost.UseUrls(https ? new[] { serviceUrl, oidcAuthority } : new[] { serviceUrl });
             builder.Logging.ClearProviders();
             var app = builder.Build();
             app.MapMockNetSuite(mock);
             await app.StartAsync();
-            return new MockServer(app, mock, serviceUrl);
+            return new MockServer(app, mock, serviceUrl, oidcAuthority);
         }
 
         /// <summary>Web アプリの NetSuite のデータソースの接続文字列 (鍵はテストがその場で作ったもの)。</summary>

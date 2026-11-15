@@ -276,5 +276,66 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             //内側の DB には行かない
             Assert.That(h.Inner.DataSourceCalls, Is.Empty);
         }
+
+        // ---------------------------------------------------------------- 明細
+
+        static IEnumerable<(string, NetSuiteFieldKind, bool)> Describe(NetSuiteFieldDefinition field)
+            => field.SublistFields.Select(e => (e.RestName, e.Kind, e.IsNullable));
+
+        [Test]
+        public async Task 明細の行の項目はファイルに保存して読み戻せる_明細でない項目はFieldsを書かない()
+        {
+            var direct = await StartAsync(edit: e => e.Records.AddRange(new[] { "item", "salesorder" }), useFile: false);
+            var fromFile = await StartAsync(edit: e => e.Records.AddRange(new[] { "item", "salesorder" }));
+            await UpdateFileAsync(fromFile, _directory);
+
+            var records = JsonNode.Parse(File.ReadAllText(FilePath))!["Records"]!.AsArray();
+            var salesOrder = records.Single(e => e!["Name"]!.GetValue<string>() == "salesorder")!["Fields"]!.AsArray().Select(e => e!.AsObject()).ToList();
+            var item = salesOrder.Single(e => e["Name"]!.GetValue<string>() == "item");
+            Assert.That(item["Kind"]!.GetValue<string>(), Is.EqualTo("Sublist"));
+            Assert.That(item["Fields"]!.AsArray().Select(e => e!["Name"]!.GetValue<string>()), Does.Contain("line").And.Contain("expectedShipDate"));
+            Assert.That(salesOrder.Where(e => e != item).All(e => !e.ContainsKey("Fields")), Is.True);
+
+            var expected = await direct.Connection.GetRecordDefinitionAsync("salesorder");
+            var actual = NetSuiteMetadataFile.Load(_directory, TestConnections.DataSourceName)!.Single(e => e.Name == "salesorder");
+            Assert.That(Describe(actual.FindByColumn("item")!), Is.EqualTo(Describe(expected.FindByColumn("item")!)));
+            Assert.That(Serialize(new[] { await fromFile.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, "salesorder") }),
+                Is.EqualTo(Serialize(new[] { await direct.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, "salesorder") })));
+        }
+
+        [Test]
+        public async Task ファイルの定義でも明細を読み書きできFieldsの無い古いファイルも読める()
+        {
+            var h = await MockHarness.StartAsync(null, e => e.Records.AddRange(new[] { "item", "salesorder" }), MockSublistTest.AddModules, _directory);
+            _harnesses.Add(h);
+            await UpdateFileAsync(h, _directory);
+
+            var order = (await h.IO.GetListAsync(new SearchCondition("Order")
+            {
+                Condition = new FieldValueMatchCondition { SearchTargetVariable = "Id.Value", Comparison = MatchComparison.Equal, Value = new StringValue { Value = "2" } },
+            }, 0)).Items.Single();
+            var items = (ListFieldData)order.Fields["Items"];
+            Assert.That(items.Children, Has.Count.EqualTo(1));
+            ((NumberFieldData)items.Children[0].Fields["Quantity"]).Value = 9;
+            var update = new ModuleData { Name = "Order" };
+            update.Fields["Id"] = new IdFieldData { Value = "2" };
+            update.Fields["Items"] = items;
+            h.Recorder.Clear();
+            var result = await h.IO.SubmitWithTransactionAsync(new() { new ModuleSubmitData { ModuleName = "Order", Id = "2", Update = new() { update } } });
+            Assert.That(result.Single().ExceptionMessage, Is.Empty);
+            Assert.That(h.Recorder.Requests.Single(e => e.Method == HttpMethod.Patch).Body, Is.EqualTo("""{"item":{"items":[{"line":1,"quantity":9}]}}"""));
+
+            //Fields の無い古いファイル: 明細を知らないので列にならず、ほかの項目は今までどおり
+            var root = JsonNode.Parse(File.ReadAllText(FilePath))!;
+            foreach (var record in root["Records"]!.AsArray())
+            {
+                var fields = record!["Fields"]!.AsArray();
+                foreach (var field in fields.Where(e => e!["Kind"]!.GetValue<string>() == "Sublist").ToList()) fields.Remove(field);
+            }
+            File.WriteAllText(FilePath, root.ToJsonString());
+            var old = await StartAsync(edit: e => e.Records.AddRange(new[] { "item", "salesorder" }));
+            var table = await old.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, "salesorder");
+            Assert.That(table!.Columns.Select(e => e.Name), Does.Contain("memo").And.Not.Contain("item"));
+        }
     }
 }

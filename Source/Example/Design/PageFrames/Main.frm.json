@@ -21,6 +21,22 @@
         "Module": "CustomRecordSample"
       },
       {
+        "Title": "品目",
+        "Module": "Item"
+      },
+      {
+        "Title": "受注",
+        "Module": "SalesOrder"
+      },
+      {
+        "Title": "受注明細",
+        "Module": "SalesOrderLine"
+      },
+      {
+        "Title": "従業員",
+        "Module": "Employee"
+      },
+      {
         "Title": "ユーザー",
         "Module": "AppUser"
       }

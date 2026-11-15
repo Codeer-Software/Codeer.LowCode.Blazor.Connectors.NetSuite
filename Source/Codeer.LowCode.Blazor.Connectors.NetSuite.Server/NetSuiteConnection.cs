@@ -56,39 +56,91 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         string RestUrl => Settings.ServiceUrl + "/services/rest";
 
+        //明細の表になりうる名前 (<Records の取引>_...) は、Records に書かれていてもレコードとして扱わない (読み取り専用の明細の表のまま)
         internal bool IsAllowedRecord(string recordType)
-            => Settings.Records.Contains(recordType, StringComparer.OrdinalIgnoreCase);
+            => Settings.Records.Contains(recordType, StringComparer.OrdinalIgnoreCase) && !Settings.Records.Any(e => IsLineTableCandidate(recordType, e));
 
         void CheckAllowedRecord(string recordType)
         {
-            if (!IsAllowedRecord(recordType))
-                throw new NetSuiteException($"NetSuite data source '{Settings.Name}': record type '{recordType}' is not listed in Records.");
+            if (!IsAllowedRecord(recordType)) throw NotListed(recordType);
         }
+
+        NetSuiteException NotListed(string recordType)
+            => new($"NetSuite data source '{Settings.Name}': record type '{recordType}' is not listed in Records.");
 
         // ---------------------------------------------------------------- レコードの定義
 
+        /// <summary>SuiteQL で読める表の名前か (Records のレコードと、その取引の明細の表になりうる名前)。明細の表かどうかは定義を読んで確かめる。</summary>
+        internal bool IsReadableTable(string name)
+            => IsAllowedRecord(name) || Settings.Records.Any(e => IsLineTableCandidate(name, e));
+
+        static bool IsLineTableCandidate(string name, string parent)
+            => SuiteQlTranslator.GetTransactionType(parent) != null && parent.Length + 1 < name.Length && name.StartsWith(parent + "_", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>レコード (Records に書いたもの) か、明細の表 (&lt;取引のレコード名&gt;_&lt;明細の列名&gt;) の定義。</summary>
         internal async Task<NetSuiteRecordDefinition> GetRecordDefinitionAsync(string recordType)
         {
-            CheckAllowedRecord(recordType);
+            if (!IsAllowedRecord(recordType)) return await GetLineTableDefinitionAsync(recordType);
             //定義は接続が生きている間持つ (本体も表の定義をプロセスの間持つ。NetSuite 側の項目を変えたらアプリを再起動する)
             if (_records.TryGetValue(recordType, out var cached)) return cached;
 
-            using var response = await SendAsync(() =>
+            using var json = await GetSchemaAsync(recordType);
+            //明細の行の定義 ($ref の先) は同じ metadata-catalog から読む。無ければその明細は列にしない
+            var definition = await NetSuiteRecordDefinition.FromJsonSchemaAsync(recordType, json.RootElement, async name =>
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, $"{RestUrl}/record/v1/metadata-catalog/{Uri.EscapeDataString(recordType)}");
-                request.Headers.Accept.ParseAdd("application/schema+json");
-                return request;
-            }, true);
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            var definition = NetSuiteRecordDefinition.FromJsonSchema(recordType, json.RootElement);
+                try
+                {
+                    using var target = await GetSchemaAsync(name);
+                    return target.RootElement.Clone();
+                }
+                catch (NetSuiteException e) when (e.Kind is NetSuiteErrorKind.NotFound or NetSuiteErrorKind.InvalidRequest or NetSuiteErrorKind.PermissionDenied)
+                {
+                    //明細の定義が読めないだけで、レコードごと使えなくしない (通信の失敗・認証の失敗はそのまま上げる)
+                    return null;
+                }
+                catch (JsonException)
+                {
+                    //JSON でない本文も同じ
+                    return null;
+                }
+            });
             _records[recordType] = definition;
             return definition;
         }
 
+        //明細の表。名前は Records のレコード名 + _ + そのレコードの明細の列名で照合する (レコード名に _ が入るものがあるので分割しない)
+        async Task<NetSuiteRecordDefinition> GetLineTableDefinitionAsync(string name)
+        {
+            if (_records.TryGetValue(name, out var cached) && cached.IsLineTable) return cached;
+            foreach (var parent in Settings.Records.Where(e => IsLineTableCandidate(name, e)))
+            {
+                var line = (await GetRecordDefinitionAsync(parent)).CreateLineTables().FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (line != null) return _records.GetOrAdd(line.Name, line);
+            }
+            throw NotListed(name);
+        }
+
+        async Task<JsonDocument> GetSchemaAsync(string name)
+        {
+            using var response = await SendAsync(() =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{RestUrl}/record/v1/metadata-catalog/{Uri.EscapeDataString(name)}");
+                request.Headers.Accept.ParseAdd("application/schema+json");
+                return request;
+            }, true);
+            return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        }
+
         internal async Task<List<NetSuiteRecordDefinition>> GetRecordDefinitionsAsync()
         {
+            //取引のレコードの後ろに、その明細の表を並べる
             var list = new List<NetSuiteRecordDefinition>();
-            foreach (var record in Settings.Records) list.Add(await GetRecordDefinitionAsync(record));
+            foreach (var record in Settings.Records.Where(IsAllowedRecord))
+            {
+                var definition = await GetRecordDefinitionAsync(record);
+                list.Add(definition);
+                foreach (var line in definition.CreateLineTables()) list.Add(_records.GetOrAdd(line.Name, line));
+            }
             return list;
         }
 
@@ -159,6 +211,24 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             return page;
         }
 
+        // ---------------------------------------------------------------- レコードの読み出し
+
+        /// <summary>レコードを明細つきで読む (GET record/v1/{type}/{id}?expandSubResources=true)。対象が無ければ null。</summary>
+        internal async Task<JsonDocument?> GetRecordAsync(string recordType, string id)
+        {
+            CheckAllowedRecord(recordType);
+            try
+            {
+                using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get,
+                    $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(id)}?expandSubResources=true"), true);
+                return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            }
+            catch (NetSuiteException e) when (e.Kind == NetSuiteErrorKind.NotFound)
+            {
+                return null;
+            }
+        }
+
         // ---------------------------------------------------------------- レコードの書き込み
 
         /// <summary>レコードを作り、NetSuite が採番した internal ID を返す。</summary>
@@ -174,12 +244,15 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         }
 
         /// <summary>レコードを更新する。対象が無ければ false。</summary>
-        internal async Task<bool> UpdateRecordAsync(string recordType, string id, byte[] json)
+        /// <param name="replace">要求に無い行を消す明細の REST 名 (?replace=)。空なら付けない。</param>
+        internal async Task<bool> UpdateRecordAsync(string recordType, string id, byte[] json, IReadOnlyCollection<string>? replace = null)
         {
             CheckAllowedRecord(recordType);
+            var url = $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(id)}";
+            if (replace != null && replace.Count != 0) url += "?replace=" + string.Join(",", replace.Select(Uri.EscapeDataString));
             try
             {
-                using var response = await SendAsync(() => CreateWriteRequest(HttpMethod.Patch, $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(id)}", json), false);
+                using var response = await SendAsync(() => CreateWriteRequest(HttpMethod.Patch, url, json), false);
                 return true;
             }
             catch (NetSuiteException e) when (e.Kind == NetSuiteErrorKind.NotFound)

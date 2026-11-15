@@ -1,14 +1,14 @@
 # サンプルアプリ (Source/Example) を手元で動かす
 
 `Source/Example` は、コネクターを組み込んだ Web アプリ (Cookie 認証のテンプレート) とデザイナ、そのデザインのプロジェクトです。
-NetSuite のモックにつないで、顧客・子会社・カスタムレコードの一覧・検索・詳細・保存を試せます。
+NetSuite のモックにつないで、顧客・子会社・カスタムレコード・品目・受注 (明細つき) の一覧・検索・詳細・保存と、受注の明細を横断した一覧・検索を試せます。
 
 | フォルダ | 内容 |
 |---|---|
 | `LowCodeApp.Server` / `LowCodeApp.Client` / `LowCodeApp.Client.Shared` | Web アプリ。コネクターの組み込みは `LowCodeApp.Server/Infrastructure/DataService.cs` の 2 行 |
 | `LowCodeApp.Designer` | コネクターを組み込んだデザイナ |
-| `Design` | デザインのプロジェクト (`app.clprj`)。モジュール `Customer` / `Subsidiary` / `CustomRecordSample` (NetSuite) と `AppUser` (ログインするユーザー・SQLite) |
-| `Data/main.sql` | ログインするユーザーの表と、最初のユーザー (admin / admin) |
+| `Design` | デザインのプロジェクト (`app.clprj`)。モジュール `Customer` / `Subsidiary` / `CustomRecordSample` / `Item` / `SalesOrder` / `SalesOrderItem` / `SalesOrderLine` / `Employee` (NetSuite) と `AppUser` (ログインするユーザー・SQLite) |
+| `Data/main.sql` | ログインするユーザーの表と、最初のユーザー (admin / admin) と、NetSuite でだけログインするユーザー (モックの従業員 `ichiro.sato@example.com`。パスワードなし) |
 
 .NET 10 の SDK が要ります (デザイナとモックは .NET 8)。CLB のライセンスを登録したマシンで動かします。
 以下のパスは例です。変えるときは、それぞれの設定を同じ値にそろえます。
@@ -68,12 +68,42 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 
 `http://localhost:5085` を開き、admin / admin でログインします。メニューの「顧客」から一覧・検索・詳細・保存を試せます。保存はモックのデータに入ります。
 
+受注のモジュール:
+
+| モジュール | 内容 |
+|---|---|
+| `Item` (メニューの「品目」) | NetSuite の `item` |
+| `SalesOrder` (「受注」) | NetSuite の `salesorder`。顧客へのリンク・日付・メモと、明細 (`item`) の一覧。一覧の画面には明細を出しません (一覧で明細を読まない) |
+| `SalesOrderItem` | 受注の明細の行 (表を持たない行のモジュール)。品目は `Item` を候補にした SelectField で選びます |
+| `SalesOrderLine` (「受注明細」) | 受注の明細の表 `salesorder_item` (読み取り専用)。品目・数量で検索でき、受注と品目へのリンクを持ちます |
+
 DB とデザインの置き場所は `LowCodeApp.Server/appsettings.Development.json` (`ConnectionStrings:Main`・`DesignFileDirectory`) です。環境変数 `ConnectionStrings__Main`・`DesignFileDirectory` でも上書きできます。
+
+## NetSuite のアカウントでログインする
+
+モックを https つきで起動していれば (開発用証明書を信頼済みにしてから起動。[NetSuiteMock.md](NetSuiteMock.md))、ログイン画面の「NetSuite」のボタンからモックの従業員でログインできます。
+外部ログインの設定はリポジトリに入れず、環境変数か `appsettings.Development.json` で渡します (PowerShell の例。`ClientId`・`ClientSecret` はモックなら空でなければ何でもよい)。
+
+```
+$env:OidcLogins__0__Name = "NetSuite"
+$env:OidcLogins__0__DisplayName = "NetSuite"
+$env:OidcLogins__0__ClientId = "mock-client"
+$env:OidcLogins__0__ClientSecret = "mock-secret"
+$env:OidcLogins__0__Authority = "https://localhost:5081"
+$env:OidcLogins__0__Scopes__0 = "openid"
+$env:OidcLogins__0__Scopes__1 = "email"
+$env:OidcLogins__0__LoginNameClaim = "email"
+```
+
+ユーザーモジュールは `AppUser` のままで、NetSuite のメールを `AppUser` のメールの列 (契約の `ExternalLoginName`) と突き合わせます ([NetSuite.md](NetSuite.md) の方式 1)。
+モックの画面で「Ichiro Sato」を選ぶと「佐藤 一郎」でログインします。ほかの従業員は `AppUser` に行が無いので「このアカウントは登録されていません」で戻ります。admin / admin のログインもそのまま使えます。
+
+ユーザーモジュールを `Employee` にする方式 2 は、このサンプルのままでは動きません。ログインの仕組みが `DataService.DbAccess` (NetSuite を包む前の `DbAccessor`) でユーザーを読むためです。
 
 ## ブラウザのテスト
 
 `Source/Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest` は、ここまでの手順を一時フォルダで自動で行い (モック・鍵・DB・App.zip・アプリの起動)、ヘッドレスの Chrome で操作します。
-上の手順で作った設定や DB は使いません。
+上の手順で作った設定や DB は使いません。NetSuite のアカウントでのログインのテストは、モックを https で立てるので、ASP.NET Core の開発用証明書を信頼済みにしたマシンで動かします (`dotnet dev-certs https --trust`)。
 
 ```
 cd Source

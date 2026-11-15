@@ -39,7 +39,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         {
             if (string.IsNullOrEmpty(_metadataDirectory)) return null;
             var saved = NetSuiteMetadataFile.Load(_metadataDirectory, connection.Settings.Name) ?? new();
-            return saved.Where(e => connection.IsAllowedRecord(e.Name)).ToList();
+            //明細の表は、親のレコードが Records にあるときだけ
+            return saved.Where(e => connection.IsAllowedRecord(e.LineParent ?? e.Name)).ToList();
         }
 
         NetSuiteConnection? Find(string dataSourceName)
@@ -120,39 +121,63 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         static async Task<List<IDictionary<string, object>>> QueryCoreAsync(NetSuiteConnection connection, string query, Dictionary<string, object?> args)
         {
-            var select = await SuiteQlTranslator.TranslateSelectAsync(query, args, connection.IsAllowedRecord, connection.GetRecordDefinitionAsync);
-            var rows = new List<IDictionary<string, object>>();
-            if (select.Limit == 0) return rows;
+            var select = await SuiteQlTranslator.TranslateSelectAsync(query, args, connection.IsReadableTable, connection.GetRecordDefinitionAsync);
+            var items = await ReadItemsAsync(connection, select);
+            var rows = items.Select(e => ToRow(select, e)).ToList();
+            if (select.Sublists.Count != 0) await ReadSublistsAsync(connection, select, items, rows);
+            return rows;
+        }
+
+        static async Task<List<Dictionary<string, string?>>> ReadItemsAsync(NetSuiteConnection connection, SuiteQlSelect select)
+        {
+            var items = new List<Dictionary<string, string?>>();
+            if (select.Limit == 0) return items;
 
             if (select.Limit is int limit)
             {
                 if (limit <= MaxPageSize)
                 {
                     var page = await connection.QuerySuiteQlAsync(select.Sql, select.Parameters, limit, select.Offset);
-                    rows.AddRange(page.Items.Select(e => ToRow(select, e)));
-                    return rows;
+                    items.AddRange(page.Items);
+                    return items;
                 }
                 //1 回の要求は 1000 行まで、offset は limit の倍数でなければならない。1000 行の区切りで読み、要る範囲だけ取り出す
                 var skip = select.Offset % MaxPageSize;
-                for (var offset = select.Offset - skip; rows.Count < skip + limit; offset += MaxPageSize)
+                for (var offset = select.Offset - skip; items.Count < skip + limit; offset += MaxPageSize)
                 {
                     var page = await connection.QuerySuiteQlAsync(select.Sql, select.Parameters, MaxPageSize, offset);
-                    rows.AddRange(page.Items.Select(e => ToRow(select, e)));
+                    items.AddRange(page.Items);
                     if (!page.HasMore || page.Items.Count == 0) break;
                 }
-                return rows.Skip(skip).Take(limit).ToList();
+                return items.Skip(skip).Take(limit).ToList();
             }
 
             for (var offset = 0; ; offset += MaxPageSize)
             {
                 var page = await connection.QuerySuiteQlAsync(select.Sql, select.Parameters, MaxPageSize, offset);
-                rows.AddRange(page.Items.Select(e => ToRow(select, e)));
+                items.AddRange(page.Items);
                 //多すぎる結果を黙って切り捨てない
-                if (connection.Settings.MaxRows < rows.Count)
+                if (connection.Settings.MaxRows < items.Count)
                     throw new NetSuiteException($"The query returned more than {connection.Settings.MaxRows} rows (MaxRows of the NetSuite data source). Narrow the condition or use paging.", NetSuiteErrorKind.InvalidRequest);
                 if (!page.HasMore || page.Items.Count == 0) break;
             }
-            return rows;
+            return items;
+        }
+
+        //明細の列: 行ごとにレコードを明細つきで読み、行の JSON 配列の文字列にする (同時に送る数は接続の同時実行の枠まで)
+        static async Task ReadSublistsAsync(NetSuiteConnection connection, SuiteQlSelect select, List<Dictionary<string, string?>> items, List<IDictionary<string, object>> rows)
+        {
+            await Task.WhenAll(items.Select(async (item, index) =>
+            {
+                var row = rows[index];
+                item.TryGetValue(select.IdSourceName, out var id);
+                using var record = string.IsNullOrEmpty(id) ? null : await connection.GetRecordAsync(select.Table, id);
+                foreach (var column in select.Sublists)
+                {
+                    //読んでいる間に消されたレコードは明細なし
+                    row[column.Key] = record == null ? null! : NetSuiteSublistJson.ToColumnValue(record.RootElement, column.Sublist!);
+                }
+            }));
         }
 
         static IDictionary<string, object> ToRow(SuiteQlSelect select, Dictionary<string, string?> item)
@@ -201,6 +226,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             var connection = Find(dataSourceName);
             if (connection == null) return await _inner.InsertAsync(dataSourceName, query, args);
 
+            await CheckWritableAsync(connection, query);
             var inserts = SuiteQlTranslator.ParseInserts(query);
             if (inserts.Count != 1) throw new NetSuiteException("This operation is not supported for a NetSuite data source.");
             var id = await InsertCoreAsync(connection, inserts[0], args);
@@ -213,12 +239,17 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             var connection = Find(dataSourceName);
             if (connection == null) return await _inner.ExecuteAsync(dataSourceName, query, args);
 
+            await CheckWritableAsync(connection, query);
             if (SuiteQlTranslator.IsUpdate(query))
             {
                 var update = SuiteQlTranslator.ParseUpdate(query);
                 if (!await ExistsAsync(connection, update.Table, update.Where, args)) return 0;
-                var json = await CreateRecordJsonAsync(connection, update.Table, update.Values, args);
-                return await connection.UpdateRecordAsync(update.Table, GetId(update.Where, args), json) ? 1 : 0;
+                var id = GetId(update.Where, args);
+                var body = await CreateRecordBodyAsync(connection, update.Table, update.Values, args, id);
+                if (body == null) return 0;
+                //変わった項目も明細の差も無ければ送らない
+                if (body.IsEmpty) return 1;
+                return await connection.UpdateRecordAsync(update.Table, id, body.Json, body.Replace) ? 1 : 0;
             }
             if (SuiteQlTranslator.IsDelete(query))
             {
@@ -233,10 +264,23 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             return inserts.Count;
         }
 
+        //明細の表は読むだけ (明細の行は親のレコードの明細の列で書く)
+        static async Task CheckWritableAsync(NetSuiteConnection connection, string query)
+        {
+            foreach (var table in SuiteQlTranslator.GetWriteTables(query))
+            {
+                if (connection.IsAllowedRecord(table) || !connection.IsReadableTable(table)) continue;
+                var definition = await connection.GetRecordDefinitionAsync(table);
+                if (definition.IsLineTable)
+                    throw new NetSuiteException($"'{definition.Name}' is a read-only table of the lines of sublist '{definition.LineSublist}' of record type '{definition.LineParent}'. " +
+                        $"Write the lines through the sublist column of the '{definition.LineParent}' record.");
+            }
+        }
+
         static async Task<string> InsertCoreAsync(NetSuiteConnection connection, RecordInsert insert, Dictionary<string, object?> args)
         {
-            var json = await CreateRecordJsonAsync(connection, insert.Table, insert.Values, args);
-            return await connection.CreateRecordAsync(insert.Table, json);
+            var body = await CreateRecordBodyAsync(connection, insert.Table, insert.Values, args, null);
+            return await connection.CreateRecordAsync(insert.Table, body!.Json);
         }
 
         static string GetId(RecordWhere where, Dictionary<string, object?> args)
@@ -256,25 +300,80 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             return count != null && 0 < Convert.ToDecimal(count, CultureInfo.InvariantCulture);
         }
 
-        static async Task<byte[]> CreateRecordJsonAsync(NetSuiteConnection connection, string table, List<(string Column, string Parameter)> values, Dictionary<string, object?> args)
+        class RecordBody
+        {
+            public byte[] Json { get; set; } = Array.Empty<byte>();
+            /// <summary>要求に無い行を消す明細 (?replace=)。</summary>
+            public List<string> Replace { get; } = new();
+            /// <summary>送る項目が 1 つも無い。</summary>
+            public bool IsEmpty { get; set; }
+        }
+
+        /// <summary>
+        /// 要求の本文。明細の列は、作成なら行を全部、更新 (<paramref name="updateId"/> あり) なら今の明細と比べた差だけにする。
+        /// 更新でレコードが無ければ null。
+        /// </summary>
+        static async Task<RecordBody?> CreateRecordBodyAsync(NetSuiteConnection connection, string table, List<(string Column, string Parameter)> values, Dictionary<string, object?> args, string? updateId)
         {
             var definition = await connection.GetRecordDefinitionAsync(table);
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream))
+            var fields = new List<(NetSuiteFieldDefinition Field, object? Value)>();
+            foreach (var (column, parameter) in values)
             {
-                writer.WriteStartObject();
-                foreach (var (column, parameter) in values)
-                {
-                    var field = definition.FindByColumn(column);
-                    if (field == null) throw new NetSuiteException($"Record type '{table}' has no field '{column}'.");
-                    if (field.Column == "id") throw new NetSuiteException("The internal ID of a NetSuite record is assigned by NetSuite and cannot be written.");
-                    if (!args.TryGetValue(parameter, out var value)) throw new NetSuiteException($"The value of parameter '{parameter}' is missing.");
-                    writer.WritePropertyName(field.RestName);
-                    WriteValue(writer, field, value);
-                }
-                writer.WriteEndObject();
+                var field = definition.FindByColumn(column);
+                if (field == null) throw new NetSuiteException($"Record type '{table}' has no field '{column}'.");
+                if (field.Column == "id") throw new NetSuiteException("The internal ID of a NetSuite record is assigned by NetSuite and cannot be written.");
+                if (!args.TryGetValue(parameter, out var value)) throw new NetSuiteException($"The value of parameter '{parameter}' is missing.");
+                fields.Add((field, value));
             }
-            return stream.ToArray();
+
+            //更新の明細は今の明細との差にする (同時に編集されたときは後から保存したほうが残る)
+            JsonDocument? current = null;
+            if (updateId != null && fields.Any(e => e.Field.Kind == NetSuiteFieldKind.Sublist))
+            {
+                current = await connection.GetRecordAsync(table, updateId);
+                if (current == null) return null;
+            }
+            using (current)
+            {
+                var body = new RecordBody();
+                var count = 0;
+                using var stream = new MemoryStream();
+                using (var writer = new Utf8JsonWriter(stream))
+                {
+                    writer.WriteStartObject();
+                    foreach (var (field, value) in fields)
+                    {
+                        if (field.Kind == NetSuiteFieldKind.Sublist)
+                        {
+                            var rows = NetSuiteSublistJson.ParseColumnValue(field, value);
+                            if (current == null)
+                            {
+                                //空の明細は項目ごと送らない
+                                if (rows.Count == 0) continue;
+                                writer.WritePropertyName(field.RestName);
+                                NetSuiteSublistJson.CreateInsertItems(field, rows).WriteTo(writer);
+                            }
+                            else
+                            {
+                                var (items, replace) = NetSuiteSublistJson.CreateUpdateItems(field, rows, current.RootElement);
+                                if (items == null) continue;
+                                writer.WritePropertyName(field.RestName);
+                                items.WriteTo(writer);
+                                if (replace) body.Replace.Add(field.RestName);
+                            }
+                            count++;
+                            continue;
+                        }
+                        writer.WritePropertyName(field.RestName);
+                        WriteValue(writer, field, value);
+                        count++;
+                    }
+                    writer.WriteEndObject();
+                }
+                body.Json = stream.ToArray();
+                body.IsEmpty = count == 0;
+                return body;
+            }
         }
 
         static void WriteValue(Utf8JsonWriter writer, NetSuiteFieldDefinition field, object? value)

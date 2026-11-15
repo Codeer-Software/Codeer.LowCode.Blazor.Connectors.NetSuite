@@ -1,0 +1,109 @@
+{
+  "Name": "SalesOrderItem",
+  "Fields": [
+    {
+      "JsonFieldSettings": {
+        "JsonNodes": [
+          {
+            "Key": "item"
+          },
+          {
+            "Key": "item_refName"
+          },
+          {
+            "Key": "quantity",
+            "NodeType": "Number"
+          },
+          {
+            "Key": "rate",
+            "NodeType": "Number"
+          },
+          {
+            "Key": "description"
+          },
+          {
+            "Key": "expectedShipDate",
+            "NodeType": "Date"
+          }
+        ]
+      },
+      "Name": "Json",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.JsonFieldDesign"
+    },
+    {
+      "SearchCondition": {
+        "ModuleName": "Item"
+      },
+      "ValueVariable": "Id.Value",
+      "DisplayTextVariable": "ItemId.Value",
+      "DbColumn": "item",
+      "DisplayName": "品目",
+      "Name": "Item",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SelectFieldDesign"
+    },
+    {
+      "DbColumn": "quantity",
+      "DisplayName": "数量",
+      "Name": "Quantity",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "rate",
+      "DisplayName": "単価",
+      "Name": "Rate",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
+    },
+    {
+      "DbColumn": "description",
+      "DisplayName": "説明",
+      "Name": "Description",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
+    },
+    {
+      "DbColumn": "expectedShipDate",
+      "DisplayName": "出荷予定日",
+      "Name": "ShipDate",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.DateFieldDesign"
+    }
+  ],
+  "ListLayouts": {
+    "": {
+      "Elements": [
+        [
+          {
+            "FieldName": "Item",
+            "Width": 180,
+            "CanUserSort": false
+          },
+          {
+            "FieldName": "Quantity",
+            "Width": 100,
+            "CanUserSort": false
+          },
+          {
+            "FieldName": "Rate",
+            "Width": 120,
+            "CanUserSort": false
+          },
+          {
+            "FieldName": "Description",
+            "CanUserSort": false
+          },
+          {
+            "FieldName": "ShipDate",
+            "Width": 160,
+            "CanUserSort": false
+          }
+        ]
+      ]
+    }
+  },
+  "SearchLayouts": {
+    "": {
+      "Layout": {
+        "Name": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SearchGridLayoutDesign"
+      }
+    }
+  }
+}

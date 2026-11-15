@@ -9,6 +9,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
     /// <summary>
     /// Example の Web アプリ (LowCodeApp.Server のビルド出力) を別プロセスで 127.0.0.1 の空きポートに起動する。
     /// 一時フォルダに鍵・SQLite (Example/Data/main.sql)・App.zip (Example/Design) を作り、appsettings の値は環境変数で上書きして渡す。
+    /// デザインを変えて起動するときは、Example/Design を一時フォルダに写してから変える (リポジトリのデザインは変えない)。
     /// 止めるときは、ここで起動したプロセスだけを止める。
     /// </summary>
     public sealed class AppServer : IDisposable
@@ -37,7 +38,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
             _process = process;
         }
 
-        public static async Task<AppServer> StartAsync(MockServer mock)
+        /// <param name="editDesign">デザインのフォルダ (写し) を変える。null なら Example/Design のまま。</param>
+        /// <param name="settings">足す設定 (環境変数の名前 → 値。appsettings のキーを __ 区切りで)。</param>
+        public static async Task<AppServer> StartAsync(MockServer mock, Action<string>? editDesign = null, IReadOnlyDictionary<string, string>? settings = null)
         {
             var source = FindSourceDirectory();
             var example = Path.Combine(source, "Example");
@@ -65,7 +68,15 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
             }
 
             //デザイナの送信 (デプロイ) と同じ App.zip
-            using (var zip = DesignDataFileManager.CreateZipAsync(Path.Combine(example, "Design")))
+            var designSource = Path.Combine(example, "Design");
+            if (editDesign != null)
+            {
+                var copy = Path.Combine(root, "DesignSource");
+                CopyDirectory(designSource, copy);
+                editDesign(copy);
+                designSource = copy;
+            }
+            using (var zip = DesignDataFileManager.CreateZipAsync(designSource))
             using (var file = File.Create(Path.Combine(designDirectory, "App.zip")))
             {
                 zip.CopyTo(file);
@@ -92,6 +103,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
             environment["DesignFileDirectory"] = designDirectory;
             environment["FontFileDirectory"] = Path.Combine(root, "Font");
             environment["FileSystemStorages__0__Directory"] = Path.Combine(root, "Storages");
+            foreach (var (key, value) in settings ?? new Dictionary<string, string>()) environment[key] = value;
 
             var process = new Process { StartInfo = startInfo };
             var server = new AppServer(root, baseUrl, process);
@@ -155,6 +167,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+
+        static void CopyDirectory(string source, string destination)
+        {
+            Directory.CreateDirectory(destination);
+            foreach (var file in Directory.GetFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+            foreach (var directory in Directory.GetDirectories(source)) CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
         }
 
         //このテストと同じ構成 (Debug / Release) のビルド出力を使う: bin/<Configuration>/net10.0/
