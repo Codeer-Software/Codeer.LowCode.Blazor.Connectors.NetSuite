@@ -9,7 +9,7 @@ NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.NetSuite.Server` / `Code
 - **本体リポジトリ**: `C:\tfs\codeer\Codeer.LowCode.Blazor` (参照用、直接編集しない)。本体は NuGet パッケージで参照する
 - **作りの手本**: `C:\GitHub\Codeer.LowCode.Blazor.Extras`
 - **利用者向けドキュメント**: `Docs/NetSuite.md`
-- **調査資料**: `Docs/01_netsuite_api_inventory.md` (API 調査) / `Docs/02_netsuite_specification_draft.md` (仕様案) / `Docs/03_research_request.md` (追加調査の依頼) / `Docs/04_research_request_design.md` (作りの分岐を決めるための調査の依頼) / `Docs/05_design_research_results.md` (04 の調査の回答) / `Docs/06_sandbox_verification_plan.md` (Sandbox で確かめることの計画)
+- **調査資料**: `Docs/01_netsuite_api_inventory.md` (API 調査) / `Docs/02_netsuite_specification_draft.md` (仕様案) / `Docs/03_research_request.md` (追加調査の依頼) / `Docs/04_research_request_design.md` (作りの分岐を決めるための調査の依頼) / `Docs/05_design_research_results.md` (04 の調査の回答) / `Docs/06_sandbox_verification_plan.md` (Sandbox で確かめることの計画) / `Docs/07_connector_review.md` (2026-11-16 の外部レビュー。6 件の指摘。対応状況は末尾)
 
 ## リポジトリ構成
 
@@ -256,3 +256,9 @@ ModuleDataIO (認可・インターセプタ・一覧/保存の組み立て = �
 - サブレコード・複数選択、固定の選択肢の候補、取引でないレコードの明細をまたぐ検索・集計
 - 読み取り専用の項目の判別 (いまは NetSuite がエラーを返すのに任せている。メタデータで見分けられるかは調査の回答待ち)
 - 対象外と決めたもの: 外部 ID の Upsert、保存検索・Dataset・Action・Transform・ファイル
+
+## レビュー (Docs/07) の対応状況
+
+- 6 (メタ情報の更新): 対応済み。一時ファイルに書いて読み直してから置き換える・同じファイルへの更新はプロセスの中で順に・置き換えたらキャッシュを消す
+- 3 (部分成功と結果不明): 一括の追加の途中失敗だけ対応 (エラーに作成済みの件数と internal ID)。本番画面への表示・結果不明の行の区別は未対応
+- 1・2・4・5: 未対応。1 は「決めてあること」の後勝ちと関係する。2 と 5 は Sandbox での検証待ち。4 はホストの結線の判断待ち

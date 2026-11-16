@@ -203,6 +203,52 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
+        public async Task 更新の途中で取得に失敗しても前のファイルが残り読める_一時ファイルも残らない()
+        {
+            var h = await StartAsync();
+            await UpdateFileAsync(h, _directory);
+            var before = File.ReadAllText(FilePath);
+
+            //2 件目以降に NetSuite に無いレコード (定義の取得が 404 で失敗する)
+            Assert.ThrowsAsync<NetSuiteException>(() => UpdateFileAsync(h, _directory, e => e.Records = new() { "customer", "customrecord_missing", "subsidiary" }));
+
+            Assert.That(File.ReadAllText(FilePath), Is.EqualTo(before));
+            Assert.That(Directory.GetFiles(_directory), Is.EqualTo(new[] { FilePath }));
+            var tables = await h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName);
+            Assert.That(tables!.Select(e => e.Name).OrderBy(e => e), Is.EqualTo(new[] { "customer", "customrecord_sample", "subsidiary" }));
+        }
+
+        [Test]
+        public async Task 同じファイルへ並行して更新しても壊れず中身はどちらか一方()
+        {
+            var h = await StartAsync();
+            var all = new[] { "customer", "customrecord_sample", "subsidiary" };
+            var two = new[] { "customer", "subsidiary" };
+
+            await Task.WhenAll(Enumerable.Range(0, 6).Select(i => Task.Run(() =>
+                UpdateFileAsync(h, _directory, e => e.Records = (i % 2 == 0 ? all : two).ToList()))));
+
+            Assert.That(Directory.GetFiles(_directory), Is.EqualTo(new[] { FilePath }));
+            var names = JsonNode.Parse(File.ReadAllText(FilePath))!["Records"]!.AsArray().Select(e => e!["Name"]!.GetValue<string>()).ToArray();
+            Assert.That(names, Is.EqualTo(all).Or.EqualTo(two));
+            Assert.That(NetSuiteMetadataFile.Load(_directory, TestConnections.DataSourceName)!.Select(e => e.Name), Is.EqualTo(names));
+        }
+
+        [Test]
+        public async Task 更新したあとのLoadは最終更新時刻が前と同じでも新しい中身を返す()
+        {
+            var h = await StartAsync();
+            await UpdateFileAsync(h, _directory);
+            Assert.That(NetSuiteMetadataFile.Load(_directory, TestConnections.DataSourceName)!.Select(e => e.Name), Is.EqualTo(new[] { "customer", "customrecord_sample", "subsidiary" }));
+            var lastWriteTimeUtc = File.GetLastWriteTimeUtc(FilePath);
+
+            await UpdateFileAsync(h, _directory, e => e.Records = new() { "subsidiary" });
+            File.SetLastWriteTimeUtc(FilePath, lastWriteTimeUtc);
+
+            Assert.That(NetSuiteMetadataFile.Load(_directory, TestConnections.DataSourceName)!.Select(e => e.Name), Is.EqualTo(new[] { "subsidiary" }));
+        }
+
+        [Test]
         public async Task 壊れたJSONのファイルはNetSuiteException()
         {
             var h = await StartAsync();

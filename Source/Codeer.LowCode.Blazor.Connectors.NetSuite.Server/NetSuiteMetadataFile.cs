@@ -45,7 +45,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             Converters = { new JsonStringEnumConverter() },
         };
 
+        //キーはどちらもフルパス
         static readonly ConcurrentDictionary<string, (DateTime LastWriteTimeUtc, List<NetSuiteRecordDefinition> Records)> _cache = new(StringComparer.OrdinalIgnoreCase);
+        static readonly ConcurrentDictionary<string, SemaphoreSlim> _updateLocks = new(StringComparer.OrdinalIgnoreCase);
 
         public static string GetPath(string directory, string dataSourceName)
         {
@@ -55,21 +57,44 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         /// <summary>
         /// NetSuite から Records に書かれたレコードの定義を取り直して、ファイルに保存する。
+        /// 同じフォルダの一時ファイルに書いて読み直してから置き換える (途中で失敗しても前のファイルはそのまま)。同じファイルへの更新は順に行う (プロセスの中だけ)。
         /// </summary>
         public static async Task UpdateAsync(NetSuiteConnection connection, string directory)
         {
-            var records = await connection.ReloadRecordDefinitionsAsync();
-            var data = new FileData
+            var path = Path.GetFullPath(GetPath(directory, connection.Settings.Name));
+            var gate = _updateLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+            try
             {
-                Records = records.OrderBy(e => e.Name, StringComparer.Ordinal).Select(record => new RecordData
+                var records = await connection.ReloadRecordDefinitionsAsync();
+                var data = new FileData
                 {
-                    Name = record.Name,
-                    Parent = record.LineParent,
-                    Sublist = record.LineSublist,
-                    Fields = record.Fields.Select(ToFieldData).ToList(),
-                }).ToList(),
-            };
-            await File.WriteAllTextAsync(GetPath(directory, connection.Settings.Name), JsonSerializer.Serialize(data, _jsonOptions));
+                    Records = records.OrderBy(e => e.Name, StringComparer.Ordinal).Select(record => new RecordData
+                    {
+                        Name = record.Name,
+                        Parent = record.LineParent,
+                        Sublist = record.LineSublist,
+                        Fields = record.Fields.Select(ToFieldData).ToList(),
+                    }).ToList(),
+                };
+                var temp = $"{path}.{Guid.NewGuid():N}.tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(data, _jsonOptions));
+                    Read(temp);
+                    File.Move(temp, path, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(temp)) File.Delete(temp);
+                }
+                //置き換えたファイルの最終更新時刻が前と同じになっても古い定義を返さないように
+                _cache.TryRemove(path, out _);
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         static FieldData ToFieldData(NetSuiteFieldDefinition field) => new()
@@ -92,15 +117,24 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>保存してある定義。ファイルが無ければ null。</summary>
         internal static List<NetSuiteRecordDefinition>? Load(string directory, string dataSourceName)
         {
-            var path = GetPath(directory, dataSourceName);
+            var path = Path.GetFullPath(GetPath(directory, dataSourceName));
             if (!File.Exists(path)) return null;
             var lastWriteTimeUtc = File.GetLastWriteTimeUtc(path);
             if (_cache.TryGetValue(path, out var cached) && cached.LastWriteTimeUtc == lastWriteTimeUtc) return cached.Records;
 
+            var records = Read(path);
+            _cache[path] = (lastWriteTimeUtc, records);
+            return records;
+        }
+
+        static List<NetSuiteRecordDefinition> Read(string path)
+        {
             FileData? data;
             try
             {
-                data = JsonSerializer.Deserialize<FileData>(File.ReadAllText(path), _jsonOptions);
+                //読んでいる間も更新の置き換え (File.Move) を止めない
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                data = JsonSerializer.Deserialize<FileData>(stream, _jsonOptions);
             }
             catch (JsonException e)
             {
@@ -113,7 +147,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 foreach (var field in record.Fields) definition.Fields.Add(FromFieldData(field));
                 records.Add(definition);
             }
-            _cache[path] = (lastWriteTimeUtc, records);
             return records;
         }
     }

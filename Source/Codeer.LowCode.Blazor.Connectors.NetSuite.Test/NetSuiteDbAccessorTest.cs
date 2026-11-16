@@ -259,6 +259,43 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(_h.Fake.WriteRequests, Has.Count.EqualTo(1));
         }
 
+        const string BulkInsert = "BEGIN\n  INSERT INTO \"customer\" (\"companyname\") VALUES (:p0_0);\n  INSERT INTO \"customer\" (\"companyname\") VALUES (:p1_0);\n  INSERT INTO \"customer\" (\"companyname\") VALUES (:p2_0);\nEND;";
+
+        static Dictionary<string, object?> BulkArgs() => new() { [":p0_0"] = "A", [":p1_0"] = "B", [":p2_0"] = "C" };
+
+        [Test]
+        public void 一括の追加が途中で失敗するとエラーに作成済みの件数とIDが入りKindは元のまま()
+        {
+            var count = 0;
+            _h.Fake.Override(e => e.IsRecordWrite, request =>
+            {
+                if (Interlocked.Increment(ref count) > 1) return FakeNetSuite.ErrorDetails(HttpStatusCode.BadRequest, ("Please enter a value for Subsidiary.", "USER_ERROR", "subsidiary"));
+                var response = new HttpResponseMessage(HttpStatusCode.NoContent);
+                response.Headers.Location = new Uri(FakeNetSuite.RestUrl + "/record/v1/customer/501");
+                return response;
+            }, times: 3);
+
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.ExecuteAsync(TestConnections.DataSourceName, BulkInsert, BulkArgs()));
+
+            Assert.That(ex!.Message, Does.Contain("1 of 3").And.Contain("501").And.Contain("Please enter a value for Subsidiary."));
+            Assert.That(ex.Kind, Is.EqualTo(NetSuiteErrorKind.InvalidRequest));
+            Assert.That(ex.InnerException, Is.TypeOf<NetSuiteException>());
+            //3 件目は送らない
+            Assert.That(_h.Fake.WriteRequests, Has.Count.EqualTo(2));
+        }
+
+        [Test]
+        public void 一括の追加が1件目で失敗したら元の例外のまま()
+        {
+            _h.Fake.Override(e => e.IsRecordWrite, _ => FakeNetSuite.ErrorDetails(HttpStatusCode.BadRequest, ("Please enter a value for Subsidiary.", "USER_ERROR", "subsidiary")));
+
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.ExecuteAsync(TestConnections.DataSourceName, BulkInsert, BulkArgs()));
+
+            Assert.That(ex!.Message, Does.Not.Contain("of 3"));
+            Assert.That(ex.ErrorCode, Is.EqualTo("USER_ERROR"));
+            Assert.That(ex.InnerException, Is.Null);
+        }
+
         // ---------------------------------------------------------------- 更新・削除
 
         [Test]

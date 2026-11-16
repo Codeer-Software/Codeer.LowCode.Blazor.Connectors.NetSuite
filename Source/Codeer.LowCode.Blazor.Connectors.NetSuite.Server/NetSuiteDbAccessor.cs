@@ -259,8 +259,21 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             }
 
             //一括の追加 (1 件ずつ作る。途中で失敗しても、そこまでに作ったレコードは残る)
+            //途中で失敗したら、作れたレコードの internal ID をエラーに入れる (照合して再開できるように)
             var inserts = SuiteQlTranslator.ParseInserts(query);
-            foreach (var insert in inserts) await InsertCoreAsync(connection, insert, args);
+            var created = new List<string>();
+            foreach (var insert in inserts)
+            {
+                try
+                {
+                    created.Add(await InsertCoreAsync(connection, insert, args));
+                }
+                catch (NetSuiteException e) when (created.Count > 0)
+                {
+                    throw new NetSuiteException($"{created.Count} of {inserts.Count} records were created before the error (internal IDs: {string.Join(", ", created)}). " +
+                        $"Record {created.Count + 1} failed: {e.Message}", e.Kind, e);
+                }
+            }
             return inserts.Count;
         }
 
