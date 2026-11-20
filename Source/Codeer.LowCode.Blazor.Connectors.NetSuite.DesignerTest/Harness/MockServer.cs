@@ -28,7 +28,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest.Harness
         /// <summary>付いている mock-data.json。</summary>
         public static string DefaultDataPath => Path.Combine(AppContext.BaseDirectory, "mock-data.json");
 
-        public static string DefaultRecords => "subsidiary,customer,customrecord_sample";
+        /// <summary>付いている mock-data.json のレコード (メタ情報の更新で全部が表になる。取引の明細の表を含む)。</summary>
+        public static string[] DefaultTables => new[] { "customer", "customrecord_sample", "employee", "item", "salesorder", "salesorder_item", "subsidiary" };
 
         public static async Task<MockServer> StartAsync(string? dataJson = null)
         {

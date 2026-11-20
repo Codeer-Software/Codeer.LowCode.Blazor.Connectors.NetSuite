@@ -11,6 +11,8 @@ namespace NetSuite.Mock
     {
         public int Status { get; init; }
         public string? Body { get; init; }
+        /// <summary>バイナリの本文 (ファイルの中身)。あれば Body より先に使う。</summary>
+        public byte[]? Data { get; init; }
         public string ContentType { get; init; } = "application/json";
         public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
@@ -64,7 +66,17 @@ namespace NetSuite.Mock
             using var document = JsonDocument.Parse(json, MockValues.JsonOptions);
             var rows = new List<(string, JsonElement)>();
             var records = MockValues.ReadDefinitions(document.RootElement, rows);
-            return new MockNetSuite(records, rows.Select(e => (e.Item1, e.Item2.Clone())).ToList());
+            var mock = new MockNetSuite(records, rows.Select(e => (e.Item1, e.Item2.Clone())).ToList());
+            try
+            {
+                mock.LoadFileCabinet(document.RootElement);
+            }
+            catch
+            {
+                mock.Dispose();
+                throw;
+            }
+            return mock;
         }
 
         /// <summary>mock-data.json の形のファイルから作る。</summary>
@@ -134,9 +146,12 @@ namespace NetSuite.Mock
         //transactionline の決まった列 (同じ名前の明細の項目はこちらが優先)
         static readonly HashSet<string> TransactionLineColumns = new(StringComparer.OrdinalIgnoreCase) { "uniquekey", "transaction", "id", "linesequencenumber", "mainline", "taxline" };
 
-        /// <summary>SuiteQL で読める表か (レコード名と、取引のレコードがあるときの transaction、明細のある取引があるときの transactionline)。</summary>
+        /// <summary>
+        /// SuiteQL で読める表か (取引でないレコード名と、取引のレコードがあるときの transaction、明細のある取引があるときの transactionline)。
+        /// 取引のレコード名 (salesOrder など) は NetSuite と同じく表として読めない (transaction の表を type で絞って読む)。
+        /// </summary>
         bool IsTable(string name)
-            => FindRecord(name) != null || (string.Equals(name, "transaction", StringComparison.OrdinalIgnoreCase) && _records.Any(e => e.IsTransaction)) ||
+            => FindRecord(name) is { IsTransaction: false } ||(string.Equals(name, "transaction", StringComparison.OrdinalIgnoreCase) && _records.Any(e => e.IsTransaction)) ||
                (string.Equals(name, "transactionline", StringComparison.OrdinalIgnoreCase) && _records.Any(e => e.IsTransaction && e.Sublists.Count != 0));
 
         void LoadRows(List<(string Record, JsonElement Row)> rows)
@@ -686,6 +701,7 @@ namespace NetSuite.Mock
         {
             w.WriteStartObject(field.Name);
             w.WriteString("title", DisplayName(field));
+            if (field.ReadOnly) w.WriteBoolean("readOnly", true);
             switch (field.Type)
             {
                 case MockFieldType.String: w.WriteString("type", "string"); break;
@@ -700,6 +716,23 @@ namespace NetSuite.Mock
                     w.WriteStartObject("id");
                     w.WriteString("title", "Internal identifier");
                     w.WriteString("type", "string");
+                    w.WriteEndObject();
+                    w.WriteStartObject("refName");
+                    w.WriteString("title", "Reference Name");
+                    w.WriteString("type", "string");
+                    w.WriteEndObject();
+                    w.WriteEndObject();
+                    break;
+                case MockFieldType.Select:
+                    //固定の選択肢: id の enum に内部の値だけを並べる (表示名はメタデータに出さない)
+                    w.WriteString("type", "object");
+                    w.WriteStartObject("properties");
+                    w.WriteStartObject("id");
+                    w.WriteString("title", "Internal identifier");
+                    w.WriteString("type", "string");
+                    w.WriteStartArray("enum");
+                    foreach (var value in field.Values) w.WriteStringValue(value.Key);
+                    w.WriteEndArray();
                     w.WriteEndObject();
                     w.WriteStartObject("refName");
                     w.WriteString("title", "Reference Name");
@@ -986,6 +1019,7 @@ namespace NetSuite.Mock
                 command.CommandText = $"delete from \"{record.Name}\" where id = @id";
                 command.Parameters.AddWithValue("@id", id);
                 command.ExecuteNonQuery();
+                RemoveAttachments(record.Name, id);
                 return NoContent();
             }
         }

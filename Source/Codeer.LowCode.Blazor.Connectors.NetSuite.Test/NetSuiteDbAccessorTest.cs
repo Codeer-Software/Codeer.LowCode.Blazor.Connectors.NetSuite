@@ -277,8 +277,12 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
 
             var ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.ExecuteAsync(TestConnections.DataSourceName, BulkInsert, BulkArgs()));
 
-            Assert.That(ex!.Message, Does.Contain("1 of 3").And.Contain("501").And.Contain("Please enter a value for Subsidiary."));
+            Assert.That(ex!.Message, Does.Contain("1 of 3").And.Contain("501").And.Contain("Record 2 failed: NetSuite: Please enter a value for Subsidiary.")
+                .And.Contain("The remaining 1 records were not sent."));
             Assert.That(ex.Kind, Is.EqualTo(NetSuiteErrorKind.InvalidRequest));
+            Assert.That((ex.ErrorCode, ex.ErrorPath), Is.EqualTo(("USER_ERROR", "subsidiary")));
+            //作成済みの internal ID は型で取れる (利用者への文言を組み立てる側が使う)
+            Assert.That(ex.CreatedIds, Is.EqualTo(new[] { "501" }));
             Assert.That(ex.InnerException, Is.TypeOf<NetSuiteException>());
             //3 件目は送らない
             Assert.That(_h.Fake.WriteRequests, Has.Count.EqualTo(2));
@@ -293,6 +297,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
 
             Assert.That(ex!.Message, Does.Not.Contain("of 3"));
             Assert.That(ex.ErrorCode, Is.EqualTo("USER_ERROR"));
+            Assert.That(ex.CreatedIds, Is.Empty);
             Assert.That(ex.InnerException, Is.Null);
         }
 
@@ -440,7 +445,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public async Task GetCustomTableDefinitionsAsyncはRecordsの全レコードを返す()
+        public async Task GetCustomTableDefinitionsAsyncはメタ情報のファイルの全レコードを返す()
         {
             var tables = (await _h.Accessor.GetCustomTableDefinitionsAsync("NS"))!;
             Assert.That(tables.Select(e => e.Name), Is.EqualTo(new[] { "customer", "subsidiary" }));

@@ -231,7 +231,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             """;
 
         static async Task<MockHarness> StartRequiredAsync()
-            => await MockHarness.StartAsync(global::NetSuite.Mock.MockNetSuite.FromJson(RequiredData), e => e.Records = new() { "parent", "required" }, d =>
+            => await MockHarness.StartAsync(global::NetSuite.Mock.MockNetSuite.FromJson(RequiredData), null, d =>
             {
                 var m = new Codeer.LowCode.Blazor.Repository.Design.ModuleDesign { Name = "Required", DataSourceName = TestConnections.DataSourceName, DbTable = "required", CanUpdate = true };
                 m.Fields.Add(new Codeer.LowCode.Blazor.Repository.Design.IdFieldDesign { Name = "Id", DbColumn = "id" });
@@ -299,6 +299,61 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(ex.ErrorPath, Is.EqualTo(column));
         }
 
+        // ---------------------------------------------------------------- 固定の選択肢・読み取り専用
+
+        [Test]
+        public async Task 選択肢と読み取り専用はメタデータから読み_選択肢はメタ情報のファイルに並びのまま入る()
+        {
+            var definition = await _h.Connection.FetchRecordDefinitionAsync("customer", "customer");
+            var select = definition.FindByColumn("emailpreference")!;
+            Assert.That((select.Kind, select.IsReadOnly), Is.EqualTo((NetSuiteFieldKind.Reference, false)));
+            Assert.That(select.Choices, Is.EqualTo(new[] { "_default", "_hTML", "_pDF" }));
+            var created = definition.FindByColumn("datecreated")!;
+            Assert.That((created.Kind, created.IsReadOnly, created.Choices), Is.EqualTo((NetSuiteFieldKind.DateTime, true, (List<string>?)null)));
+            //参照 (選択肢の無い id) は選択肢を持たない
+            Assert.That(definition.FindByColumn("subsidiary")!.Choices, Is.Null);
+
+            var file = JsonNode.Parse(File.ReadAllText(_h.Project.MetadataPath()))!["Records"]!.AsArray().Single(e => e!["Name"]!.GetValue<string>() == "customer")!["Fields"]!.AsArray();
+            Assert.That(file.Single(e => e!["Name"]!.GetValue<string>() == "emailPreference")!["Choices"]!.ToJsonString(),
+                Is.EqualTo("""[{"Value":"_default"},{"Value":"_hTML"},{"Value":"_pDF"}]"""));
+            Assert.That(file.Single(e => e!["Name"]!.GetValue<string>() == "dateCreated")!["ReadOnly"]!.GetValue<bool>(), Is.True);
+            //ファイルから読んだ定義も同じ
+            var loaded = _h.Project.MetadataFile.Load(TestConnections.DataSourceName).Records.Single(e => e.Name == "customer");
+            Assert.That(loaded.FindByColumn("emailpreference")!.Choices, Is.EqualTo(new[] { "_default", "_hTML", "_pDF" }));
+            Assert.That(loaded.FindByColumn("datecreated")!.IsReadOnly, Is.True);
+        }
+
+        [Test]
+        public async Task 選択肢の項目は内部の値をidで書き_読むと内部の値と表示名()
+        {
+            var result = await _h.Accessor.ExecuteAsync(TestConnections.DataSourceName, "update \"customer\" set \"emailpreference\"=:p0 where \"id\"=:pid0",
+                new Dictionary<string, object?> { [":p0"] = "_default", [":pid0"] = "3" });
+
+            Assert.That(result, Is.EqualTo(1));
+            Assert.That(_h.Recorder.Requests.Single(e => e.Method == HttpMethod.Patch).Body, Is.EqualTo("""{"emailPreference":{"id":"_default"}}"""));
+            var rest = (await GetRestRecordAsync("customer", "3"))!;
+            Assert.That(rest["emailPreference"]!.ToJsonString(), Is.EqualTo("""{"id":"_default","refName":"Default"}"""));
+        }
+
+        [Test]
+        public async Task 読み取り専用の項目は作成では送らず_更新ではエラーで要求を送らない()
+        {
+            var args = new Dictionary<string, object?> { [":p0"] = "Read Only Works", [":p1"] = "2", [":p2"] = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) };
+            var id = await _h.Accessor.InsertAsync(TestConnections.DataSourceName,
+                "BEGIN INSERT INTO \"customer\"(\"companyname\",\"subsidiary\",\"datecreated\") VALUES (:p0,:p1,:p2) RETURNING \"id\" INTO :returning_id; END;", args);
+
+            var post = _h.Recorder.Requests.Single(e => e.Method == HttpMethod.Post && e.Path == "/services/rest/record/v1/customer");
+            Assert.That(post.Body, Is.EqualTo("""{"companyName":"Read Only Works","subsidiary":{"id":"2"}}"""));
+            Assert.That(id, Is.Not.Empty);
+
+            _h.Recorder.Clear();
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.ExecuteAsync(TestConnections.DataSourceName,
+                "update \"customer\" set \"companyname\"=:p0,\"datecreated\"=:p1 where \"id\"=:pid0",
+                new Dictionary<string, object?> { [":p0"] = "X", [":p1"] = new DateTime(2020, 1, 1), [":pid0"] = "1" }))!;
+            Assert.That((ex.Kind, ex.Message), Is.EqualTo((NetSuiteErrorKind.InvalidRequest, "Field 'dateCreated' of NetSuite record type 'customer' is read-only and cannot be written.")));
+            Assert.That(_h.Recorder.Requests.Where(e => e.Method == HttpMethod.Patch), Is.Empty);
+        }
+
         // ---------------------------------------------------------------- 削除
 
         [Test]
@@ -352,28 +407,31 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         [Test]
         public async Task トークンは1回取って使い回し_失効したら401で取り直す()
         {
+            //メタ情報のファイルを書いた接続が取った分を除く
+            var issued = _h.Mock.IssuedTokenCount;
             await _h.IO.GetListAsync(new SearchCondition("Subsidiary"), 0);
             await _h.IO.GetListAsync(new SearchCondition("Subsidiary"), 0);
-            Assert.That(_h.Mock.IssuedTokenCount, Is.EqualTo(1));
+            Assert.That(_h.Mock.IssuedTokenCount - issued, Is.EqualTo(1));
 
             _h.Mock.RevokeTokens();
             var result = await _h.IO.GetListAsync(new SearchCondition("Subsidiary"), 0);
 
             Assert.That(result.Items, Has.Count.EqualTo(MockHarness.Rows("subsidiary").Count));
-            Assert.That(_h.Mock.IssuedTokenCount, Is.EqualTo(2));
+            Assert.That(_h.Mock.IssuedTokenCount - issued, Is.EqualTo(2));
         }
 
         [Test]
         public async Task モックの時計でトークンの期限が切れても取り直して続ける()
         {
             _h.Mock.TokenLifetime = TimeSpan.FromSeconds(10);
+            var issued = _h.Mock.IssuedTokenCount;
             await _h.IO.GetListAsync(new SearchCondition("Subsidiary"), 0);
             var now = DateTime.UtcNow;
             _h.Mock.UtcNow = () => now.AddSeconds(60);
 
             //コネクターはまだ期限内だと思っているので、401 を受けてから取り直す
             await _h.IO.GetListAsync(new SearchCondition("Subsidiary"), 0);
-            Assert.That(_h.Mock.IssuedTokenCount, Is.EqualTo(2));
+            Assert.That(_h.Mock.IssuedTokenCount - issued, Is.EqualTo(2));
         }
     }
 }

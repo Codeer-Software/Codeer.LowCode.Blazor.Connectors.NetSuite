@@ -19,7 +19,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         static Task<SuiteQlSelect> TranslateAsync(string sql, Dictionary<string, object?>? args = null)
-            => SuiteQlTranslator.TranslateSelectAsync(sql, args ?? new(), e => _definitions.ContainsKey(e), e => Task.FromResult(_definitions[e]));
+            => SuiteQlTranslator.TranslateSelectAsync(sql, args ?? new(),
+                e => _definitions.TryGetValue(e, out var definition) ? Task.FromResult(definition) : throw new NetSuiteException($"Record type '{e}' is not in the metadata."));
 
         // ---------------------------------------------------------------- 読み出し
 
@@ -152,7 +153,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public void Recordsに無い表は例外()
+        public void 定義の無い表は例外()
         {
             Assert.ThrowsAsync<NetSuiteException>(() => TranslateAsync("select \"employee\".\"id\" as \"a\" from \"employee\""));
             Assert.ThrowsAsync<NetSuiteException>(() => TranslateAsync(
@@ -160,7 +161,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public void 副問い合わせの中のRecordsに無い表も例外()
+        public void 副問い合わせの中の定義の無い表も例外()
         {
             Assert.ThrowsAsync<NetSuiteException>(() => TranslateAsync(
                 "select \"customer\".\"id\" as \"a\" from \"customer\" where \"customer\".\"id\" in (select \"employee\".\"id\" from \"employee\")"));
@@ -306,7 +307,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public void 集計_派生表の中のRecordsに無い表は例外()
+        public void 集計_派生表の中の定義の無い表は例外()
         {
             Assert.ThrowsAsync<NetSuiteException>(() => TranslateAsync("select count(*) from (select 1 as c_l_b_g from \"employee\" group by \"employee\".\"id\") c_l_b_agg"));
             Assert.ThrowsAsync<NetSuiteException>(() => TranslateAsync(

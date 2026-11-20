@@ -25,7 +25,11 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.68" />
+    <PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.70" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 利用者のアプリでは PackageReference Codeer.LowCode.Blazor.Connectors.NetSuite (画面のフィールド。サーバーは Client 経由で届く) -->
+    <ProjectReference Include="..\..\Codeer.LowCode.Blazor.Connectors.NetSuite\Codeer.LowCode.Blazor.Connectors.NetSuite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\colorpicker.png" />

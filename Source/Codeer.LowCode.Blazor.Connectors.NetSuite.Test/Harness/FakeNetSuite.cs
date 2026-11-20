@@ -16,8 +16,10 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
 
         public bool IsToken => Path.EndsWith("/auth/oauth2/v1/token");
         public bool IsMetadata => Path.Contains("/record/v1/metadata-catalog/");
+        /// <summary>レコード種別の一覧 (GET record/v1/metadata-catalog)。</summary>
+        public bool IsMetadataCatalog => Path.EndsWith("/record/v1/metadata-catalog");
         public bool IsSuiteQl => Path.EndsWith("/query/v1/suiteql");
-        public bool IsRecordWrite => Path.Contains("/record/v1/") && !IsMetadata;
+        public bool IsRecordWrite => Path.Contains("/record/v1/") && !IsMetadata && !IsMetadataCatalog;
 
         public string? Header(string name) => Headers.TryGetValue(name, out var v) ? v : null;
         public JsonNode? Json => string.IsNullOrEmpty(Body) ? null : JsonNode.Parse(Body);
@@ -194,6 +196,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
             {
                 var n = Interlocked.Increment(ref _tokenCount);
                 return Status(HttpStatusCode.OK, $$"""{"access_token":"token-{{n}}","expires_in":"{{ExpiresIn}}","token_type":"Bearer"}""");
+            }
+            if (request.IsMetadataCatalog && request.Method == HttpMethod.Get)
+            {
+                //明細の定義 (<レコード名>-...) はレコード種別の一覧に出さない
+                var catalog = new JsonArray();
+                foreach (var name in Schemas.Keys.Where(e => !e.Contains('-'))) catalog.Add(new JsonObject { ["name"] = name, ["links"] = new JsonArray() });
+                return Status(HttpStatusCode.OK, new JsonObject { ["items"] = catalog, ["links"] = new JsonArray() }.ToJsonString());
             }
             if (request.IsMetadata && request.Method == HttpMethod.Get)
             {

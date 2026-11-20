@@ -14,7 +14,12 @@ namespace NetSuite.Mock
             {
                 context.Response.StatusCode = _response.Status;
                 foreach (var header in _response.Headers) context.Response.Headers[header.Key] = header.Value;
-                if (_response.Body != null)
+                if (_response.Data != null)
+                {
+                    context.Response.ContentType = _response.ContentType;
+                    await context.Response.Body.WriteAsync(_response.Data);
+                }
+                else if (_response.Body != null)
                 {
                     context.Response.ContentType = _response.ContentType + "; charset=utf-8";
                     await context.Response.WriteAsync(_response.Body, Encoding.UTF8);
@@ -97,6 +102,42 @@ namespace NetSuite.Mock
 
             rest.MapDelete("/record/v1/{type}/{id}", (HttpRequest request, string type, string id)
                 => Authenticate(request) ?? ToResult(mock.DeleteRecord(type, id)));
+
+            //File Cabinet (文書サービス)。登録は multipart (attributes と data)
+            rest.MapPost("/document/v1/file", async (HttpRequest request) =>
+            {
+                var failed = Authenticate(request);
+                if (failed != null) return failed;
+                if (!request.HasFormContentType) return ToResult(mock.CreateFile(null, null, null, null, BaseUrl(request)));
+                var form = await request.ReadFormAsync();
+                var data = form.Files.GetFile("data");
+                byte[]? bytes = null;
+                if (data != null)
+                {
+                    using var memory = new MemoryStream();
+                    await data.CopyToAsync(memory);
+                    bytes = memory.ToArray();
+                }
+                var attributes = form.TryGetValue("attributes", out var value) ? value.ToString() : null;
+                return ToResult(mock.CreateFile(attributes, data?.FileName, data?.ContentType, bytes, BaseUrl(request)));
+            });
+
+            rest.MapGet("/document/v1/file/{id}", (HttpRequest request, string id)
+                => Authenticate(request) ?? ToResult(mock.GetFile(id, BaseUrl(request))));
+
+            rest.MapGet("/document/v1/file/{id}/content", (HttpRequest request, string id)
+                => Authenticate(request) ?? ToResult(mock.GetFileContent(id)));
+
+            //添付・外す (本文なし)
+            rest.MapPost("/record/v1/{type}/{id}/!attach/{target}/{targetId}", (HttpRequest request, string type, string id, string target, string targetId)
+                => Authenticate(request) ?? ToResult(mock.AttachOrDetach(type, id, target, targetId, true)));
+
+            rest.MapPost("/record/v1/{type}/{id}/!detach/{target}/{targetId}", (HttpRequest request, string type, string id, string target, string targetId)
+                => Authenticate(request) ?? ToResult(mock.AttachOrDetach(type, id, target, targetId, false)));
+
+            //保存検索の実行
+            rest.MapGet("/query/v1/savedsearch/{id}/result", (HttpRequest request, string id)
+                => Authenticate(request) ?? ToResult(mock.RunSavedSearch(id, request.Query["limit"].FirstOrDefault(), request.Query["offset"].FirstOrDefault(), BaseUrl(request))));
 
             //それ以外の /services/rest/...
             rest.MapFallback((HttpRequest request)

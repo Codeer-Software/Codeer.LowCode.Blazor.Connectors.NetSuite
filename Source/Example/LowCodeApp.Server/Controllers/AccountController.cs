@@ -61,7 +61,7 @@ namespace LowCodeApp.Server.Controllers
             _audit.Event.Detail = $"LoginName={loginInfo.Id}";
 
             //ID / パスワードの照合・ロックアウト・二要素認証は PasswordLogin。結果を HTTP と監査ログに写し、通ったら Cookie を発行する
-            var login = new PasswordLogin(_dataService.Design.DesignData, _dataService.DbAccess, _cache,
+            var login = new PasswordLogin(_dataService.Design.DesignData, _dataService.ModuleDbAccess, _cache,
                 SystemConfig.Instance.LoginLockout, SystemConfig.Instance.TotpLogin, SystemConfig.Instance.EmailOtpLogin,
                 message => new MailDispatcher(SystemConfig.Instance.Mail, MailSenderTable.Create).SendAsync(SystemConfig.Instance.EmailOtpLogin.MailInfraName, message));
             var result = await login.VerifyAsync(loginInfo.Id, loginInfo.Password, loginInfo.TwoFactorCode);

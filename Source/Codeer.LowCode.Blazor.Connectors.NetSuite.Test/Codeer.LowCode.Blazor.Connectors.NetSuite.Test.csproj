@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite.Server\Codeer.LowCode.Blazor.Connectors.NetSuite.Server.csproj" />
+    <ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite\Codeer.LowCode.Blazor.Connectors.NetSuite.csproj" />
     <ProjectReference Include="..\NetSuite.Mock\NetSuite.Mock.csproj" />
   </ItemGroup>
 

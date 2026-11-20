@@ -1,5 +1,6 @@
 using Codeer.LowCode.Bindings.ApexCharts;
 using Codeer.LowCode.Blazor.Components.AppParts.Loading;
+using Codeer.LowCode.Blazor.Connectors.NetSuite;
 using Codeer.LowCode.Blazor.DesignLogic;
 using Codeer.LowCode.Blazor.DesignLogic.Transfer;
 using Codeer.LowCode.Blazor.Extras;
@@ -54,6 +55,8 @@ namespace LowCodeApp.Client.Shared.Services
             _scriptRuntimeTypeManager.AddType<LoadingService.LoadingScope>();
             ApexChartsClientInitializer.Initialize(this);
             ExtrasClientInitializer.Initialize(this, http, logger, toaster);
+            //NetSuite の添付ファイルのフィールド (デザインを読む前に)
+            NetSuiteFieldsInitializer.Initialize();
         }
         public void SetCurrentUserId(string id) => CurrentUserId = id;
 

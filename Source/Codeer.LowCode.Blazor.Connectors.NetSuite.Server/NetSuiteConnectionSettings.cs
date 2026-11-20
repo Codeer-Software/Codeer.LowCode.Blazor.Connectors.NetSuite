@@ -35,9 +35,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>トークンの scope。</summary>
         public string Scope { get; set; } = "rest_webservices";
 
-        /// <summary>扱うレコード種別 (REST のレコード名。例: customer, customrecord_xxx)。ここに無いレコードは読み書きしない。</summary>
-        public List<string> Records { get; set; } = new();
-
         /// <summary>1 回の要求のタイムアウト (秒)。</summary>
         public int TimeoutSeconds { get; set; } = 100;
 
@@ -46,6 +43,34 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         /// <summary>1 回の読み出しで受け取る行の上限。件数を絞らない読み出しがこれを超えたらエラーにする (黙って切り捨てない)。</summary>
         public int MaxRows { get; set; } = 10000;
+
+        /// <summary>
+        /// 添付ファイルのフィールドで足したファイルを置く File Cabinet のフォルダの internal ID。空ならファイルを足せない (足そうとするとエラー)。
+        /// </summary>
+        public string AttachmentFolderId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 取引に今付いているファイルの一覧を読む保存検索の ID (internal ID か script ID)。空なら一覧は読まない
+        /// (添付ファイルのフィールドは足すだけになる。既存の添付の表示・ダウンロード・外すはできない)。
+        /// </summary>
+        public string AttachmentSavedSearchId { get; set; } = string.Empty;
+
+        /// <summary>保存検索の結果で、取引の internal ID を持つ列の名前。</summary>
+        public string AttachmentSearchRecordColumn { get; set; } = "internalid";
+
+        /// <summary>保存検索の結果で、ファイルの internal ID を持つ列の名前。<see cref="AttachmentSavedSearchId"/> を書いたら必須。</summary>
+        public string AttachmentSearchFileColumn { get; set; } = string.Empty;
+
+        /// <summary>保存検索の結果で、ファイル名を持つ列の名前。<see cref="AttachmentSavedSearchId"/> を書いたら必須。</summary>
+        public string AttachmentSearchFileNameColumn { get; set; } = string.Empty;
+
+        /// <summary>保存検索の結果で、ファイルの大きさを持つ列の名前 (任意。値はバイトとして表示する)。</summary>
+        public string AttachmentSearchFileSizeColumn { get; set; } = string.Empty;
+
+        /// <summary>保存検索の結果で、ファイルの種類を持つ列の名前 (任意)。</summary>
+        public string AttachmentSearchFileTypeColumn { get; set; } = string.Empty;
+
+        internal bool HasAttachmentSavedSearch => !string.IsNullOrWhiteSpace(AttachmentSavedSearchId);
 
         /// <summary>
         /// データソースが NetSuite 用 (ConnectionString が Provider=NetSuite) なら設定を読む。違えば null。
@@ -76,11 +101,17 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 CertificateId = Get(nameof(CertificateId)),
                 PrivateKeyPath = Get(nameof(PrivateKeyPath)),
                 PrivateKey = Get(nameof(PrivateKey)),
-                Records = Get(nameof(Records)).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                 TimeoutSeconds = GetInt(nameof(TimeoutSeconds), defaults.TimeoutSeconds),
                 MaxConcurrency = GetInt(nameof(MaxConcurrency), defaults.MaxConcurrency),
                 MaxRows = GetInt(nameof(MaxRows), defaults.MaxRows),
+                AttachmentFolderId = Get(nameof(AttachmentFolderId)).Trim(),
+                AttachmentSavedSearchId = Get(nameof(AttachmentSavedSearchId)).Trim(),
+                AttachmentSearchFileColumn = Get(nameof(AttachmentSearchFileColumn)).Trim(),
+                AttachmentSearchFileNameColumn = Get(nameof(AttachmentSearchFileNameColumn)).Trim(),
+                AttachmentSearchFileSizeColumn = Get(nameof(AttachmentSearchFileSizeColumn)).Trim(),
+                AttachmentSearchFileTypeColumn = Get(nameof(AttachmentSearchFileTypeColumn)).Trim(),
             };
+            if (!string.IsNullOrWhiteSpace(Get(nameof(AttachmentSearchRecordColumn)))) settings.AttachmentSearchRecordColumn = Get(nameof(AttachmentSearchRecordColumn)).Trim();
             if (!string.IsNullOrEmpty(Get(nameof(Algorithm)))) settings.Algorithm = Get(nameof(Algorithm));
             if (!string.IsNullOrEmpty(Get(nameof(Scope)))) settings.Scope = Get(nameof(Scope));
             return settings;
@@ -101,13 +132,23 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             if (!Uri.TryCreate(ServiceUrl, UriKind.Absolute, out var uri) ||
                 !(uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)))
                 throw new NetSuiteException($"NetSuite data source '{Name}': {nameof(ServiceUrl)} must be an https URL.");
-            if (Records.Count == 0)
-                throw new NetSuiteException($"NetSuite data source '{Name}': {nameof(Records)} is required (comma separated record types, e.g. Records=customer,customrecord_sample).");
+            //URL に入れる ID は形を確かめる (internal ID は数字、保存検索は数字か script ID)
+            if (!string.IsNullOrEmpty(AttachmentFolderId) && !AttachmentFolderId.All(char.IsAsciiDigit))
+                throw new NetSuiteException($"NetSuite data source '{Name}': {nameof(AttachmentFolderId)} must be the internal ID (digits) of a File Cabinet folder.");
+            if (HasAttachmentSavedSearch)
+            {
+                if (!AttachmentSavedSearchId.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+                    throw new NetSuiteException($"NetSuite data source '{Name}': {nameof(AttachmentSavedSearchId)} must be the internal ID or the script ID of a saved search.");
+                Require(AttachmentSearchRecordColumn, nameof(AttachmentSearchRecordColumn));
+                Require(AttachmentSearchFileColumn, nameof(AttachmentSearchFileColumn) + " (required with " + nameof(AttachmentSavedSearchId) + ")");
+                Require(AttachmentSearchFileNameColumn, nameof(AttachmentSearchFileNameColumn) + " (required with " + nameof(AttachmentSavedSearchId) + ")");
+            }
         }
 
-        //同じ接続先・同じ認証主体なら同じ接続 (トークン・定義のキャッシュ) を使う。秘密鍵は鍵を差し替えたら別の接続になるように含める
+        //同じ接続先・同じ認証主体なら同じ接続 (トークン・同時実行の枠) を使う。秘密鍵は鍵を差し替えたら別の接続になるように含める
         internal string GetIdentityKey()
-            => string.Join("\n", Name, ServiceUrl, ClientId, CertificateId, PrivateKeyPath, PrivateKey, Algorithm, Scope,
-                string.Join(",", Records), TimeoutSeconds, MaxConcurrency, MaxRows);
+            => string.Join("\n", Name, ServiceUrl, ClientId, CertificateId, PrivateKeyPath, PrivateKey, Algorithm, Scope, TimeoutSeconds, MaxConcurrency, MaxRows,
+                AttachmentFolderId, AttachmentSavedSearchId, AttachmentSearchRecordColumn, AttachmentSearchFileColumn, AttachmentSearchFileNameColumn,
+                AttachmentSearchFileSizeColumn, AttachmentSearchFileTypeColumn);
     }
 }

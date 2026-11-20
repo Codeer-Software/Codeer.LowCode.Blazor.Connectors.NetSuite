@@ -14,6 +14,8 @@ namespace NetSuite.Mock
         DateTime,
         /// <summary>ほかのレコードへの参照。値は相手の internal ID。</summary>
         Reference,
+        /// <summary>固定の選択肢 (値は選択肢の内部の値。REST では {"id","refName"}、メタデータでは id の enum)。</summary>
+        Select,
     }
 
     /// <summary>レコードの項目 1 つ。</summary>
@@ -34,6 +36,12 @@ namespace NetSuite.Mock
 
         /// <summary>表示名 (メタデータの title)。省略すると項目名。</summary>
         public string Title { get; init; } = string.Empty;
+
+        /// <summary>読み取り専用 (メタデータに readOnly: true を書く。書き込みは拒まない)。</summary>
+        public bool ReadOnly { get; init; }
+
+        /// <summary>選択肢 (<see cref="MockFieldType.Select"/> のとき)。内部の値 → 表示名 (refName)。</summary>
+        public List<KeyValuePair<string, string>> Values { get; init; } = new();
     }
 
     /// <summary>明細 (行キー line を持つサブリスト) 1 つの定義。</summary>
@@ -121,6 +129,22 @@ namespace NetSuite.Mock
                         if (id != null) return id;
                         break;
                     }
+                case MockFieldType.Select:
+                    {
+                        //{"id":"内部の値"} か {"refName":"表示名"} (NetSuite はどちらも受け付ける)。初期データは文字だけでもよい
+                        string? selected = null;
+                        if (value.ValueKind == JsonValueKind.Object)
+                        {
+                            if (value.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String) selected = field.Values.FirstOrDefault(e => e.Key == id.GetString()).Key;
+                            else if (value.TryGetProperty("refName", out var refName) && refName.ValueKind == JsonValueKind.String) selected = field.Values.FirstOrDefault(e => e.Value == refName.GetString()).Key;
+                        }
+                        else if (loose && value.ValueKind == JsonValueKind.String)
+                        {
+                            selected = field.Values.FirstOrDefault(e => e.Key == value.GetString()).Key;
+                        }
+                        if (selected != null) return selected;
+                        break;
+                    }
             }
             error = field.Type switch
             {
@@ -130,6 +154,7 @@ namespace NetSuite.Mock
                 MockFieldType.Number => "a number",
                 MockFieldType.Date => "a date string (YYYY-MM-DD)",
                 MockFieldType.DateTime => "a date-time string (e.g. 2026-03-04T05:06:07Z)",
+                MockFieldType.Select => "one of the values ({\"id\":\"...\"} or {\"refName\":\"...\"}): " + string.Join(", ", field.Values.Select(e => e.Key)),
                 _ => "a reference object ({\"id\":\"...\"})",
             };
             error = $"Invalid value for field '{field.Name}'. The value must be {error}.";
@@ -194,6 +219,16 @@ namespace NetSuite.Mock
                     writer.WriteString("id", Convert.ToString(value, CultureInfo.InvariantCulture));
                     writer.WriteEndObject();
                     break;
+                case MockFieldType.Select:
+                    {
+                        var id = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+                        writer.WriteStartObject();
+                        writer.WriteString("id", id);
+                        var label = field.Values.FirstOrDefault(e => e.Key == id).Value;
+                        if (label != null) writer.WriteString("refName", label);
+                        writer.WriteEndObject();
+                        break;
+                    }
                 default:
                     writer.WriteStringValue(Convert.ToString(value, CultureInfo.InvariantCulture));
                     break;
@@ -307,8 +342,9 @@ namespace NetSuite.Mock
                 if (list.Any(e => e.Column == field.Name.ToLowerInvariant())) throw new InvalidDataException($"{where}: the name is used twice (names are compared in lower case).");
 
                 string typeName;
-                bool required = false;
+                bool required = false, readOnly = false;
                 string target = string.Empty, title = string.Empty;
+                var values = new List<KeyValuePair<string, string>>();
                 if (field.Value.ValueKind == JsonValueKind.String)
                 {
                     typeName = field.Value.GetString()!;
@@ -319,6 +355,16 @@ namespace NetSuite.Mock
                     if (field.Value.TryGetProperty("required", out var r)) required = r.ValueKind == JsonValueKind.True;
                     if (field.Value.TryGetProperty("record", out var rec) && rec.ValueKind == JsonValueKind.String) target = rec.GetString()!;
                     if (field.Value.TryGetProperty("title", out var ti) && ti.ValueKind == JsonValueKind.String) title = ti.GetString()!;
+                    if (field.Value.TryGetProperty("readOnly", out var ro)) readOnly = ro.ValueKind == JsonValueKind.True;
+                    if (field.Value.TryGetProperty("values", out var vs))
+                    {
+                        if (vs.ValueKind != JsonValueKind.Object) throw new InvalidDataException($"{where}: \"values\" must be an object {{ \"<value>\": \"<display name>\" }}.");
+                        foreach (var v in vs.EnumerateObject())
+                        {
+                            if (v.Value.ValueKind != JsonValueKind.String) throw new InvalidDataException($"{where}: the display name of value '{v.Name}' must be a string.");
+                            values.Add(new(v.Name, v.Value.GetString()!));
+                        }
+                    }
                 }
                 else
                 {
@@ -333,10 +379,12 @@ namespace NetSuite.Mock
                     "date" => MockFieldType.Date,
                     "dateTime" => MockFieldType.DateTime,
                     "reference" => MockFieldType.Reference,
-                    _ => throw new InvalidDataException($"{where}: unknown type '{typeName}' (string / boolean / integer / number / date / dateTime / reference)."),
+                    "select" => MockFieldType.Select,
+                    _ => throw new InvalidDataException($"{where}: unknown type '{typeName}' (string / boolean / integer / number / date / dateTime / reference / select)."),
                 };
+                if (kind == MockFieldType.Select && values.Count == 0) throw new InvalidDataException($"{where}: a select needs \"values\": {{ \"<value>\": \"<display name>\" }}.");
                 if (kind == MockFieldType.Reference && string.IsNullOrEmpty(target)) throw new InvalidDataException($"{where}: a reference needs \"record\": \"<record name>\".");
-                list.Add(new MockField { Name = field.Name, Type = kind, Record = target, Required = required, Title = title });
+                list.Add(new MockField { Name = field.Name, Type = kind, Record = target, Required = required, Title = title, ReadOnly = readOnly, Values = values });
             }
         }
     }

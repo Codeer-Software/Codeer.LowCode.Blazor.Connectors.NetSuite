@@ -37,7 +37,7 @@ namespace LowCodeApp.Server.Extras
                 new SemanticSearchApi(SemanticSearchTable.Service, userId =>
                 {
                     var dataService = new DataService(userId);
-                    return new SemanticSearchReindexScope(dataService.ModuleDataIO, dataService.DbAccess, dataService);
+                    return new SemanticSearchReindexScope(dataService.ModuleDataIO, dataService.ModuleDbAccess, dataService);
                 }),
                 //ログイン中の自分の認証アプリ (TOTP) の状態と解除 (MyTotpResetButtonField)
                 new TotpApi(SystemConfig.Instance.TotpLogin),

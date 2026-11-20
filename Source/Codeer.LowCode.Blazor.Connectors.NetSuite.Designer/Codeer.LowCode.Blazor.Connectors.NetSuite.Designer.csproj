@@ -22,12 +22,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.68" />
-		<PackageReference Include="Codeer.LowCode.Blazor.Designer" Version="1.3.32" />
+		<PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.70" />
+		<PackageReference Include="Codeer.LowCode.Blazor.Designer" Version="1.3.71" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite.Server\Codeer.LowCode.Blazor.Connectors.NetSuite.Server.csproj" />
+		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.NetSuite\Codeer.LowCode.Blazor.Connectors.NetSuite.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

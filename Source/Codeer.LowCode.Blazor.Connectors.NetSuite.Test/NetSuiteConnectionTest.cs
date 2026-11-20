@@ -403,7 +403,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         public void 応答404はNotFound()
         {
             _fake.Override(e => e.IsMetadata, _ => FakeNetSuite.ErrorDetails(HttpStatusCode.NotFound, ("Record type not found.", "NONEXISTENT_ID", "")));
-            var ex = Assert.ThrowsAsync<NetSuiteException>(() => Create().GetRecordDefinitionAsync("customer"));
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => Create().FetchRecordDefinitionAsync("customer", "customer"));
             Assert.That(ex!.Kind, Is.EqualTo(NetSuiteErrorKind.NotFound));
             Assert.That(ex.ErrorCode, Is.EqualTo("NONEXISTENT_ID"));
         }
@@ -536,39 +536,99 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         public void 定義の読み出しも5xxは結果不明にしない()
         {
             _fake.Override(e => e.IsMetadata, _ => FakeNetSuite.Status(HttpStatusCode.InternalServerError));
-            var ex = Assert.ThrowsAsync<NetSuiteException>(() => Create().GetRecordDefinitionAsync("customer"));
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => Create().FetchRecordDefinitionAsync("customer", "customer"));
             Assert.That(ex!.Kind, Is.EqualTo(NetSuiteErrorKind.ServiceUnavailable));
         }
 
-        // ---------------------------------------------------------------- 対象のレコード
+        // ---------------------------------------------------------------- レコードの定義 (メタ情報の更新)
 
         [Test]
-        public void Recordsに無いレコードは要求を出さずに例外()
+        public async Task レコードの定義はmetadata_catalogからJSON_Schemaで読む()
         {
-            var connection = Create();
-            Assert.ThrowsAsync<NetSuiteException>(() => connection.CreateRecordAsync("employee", Json("{}")));
-            Assert.ThrowsAsync<NetSuiteException>(() => connection.UpdateRecordAsync("employee", "1", Json("{}")));
-            Assert.ThrowsAsync<NetSuiteException>(() => connection.DeleteRecordAsync("employee", "1"));
-            Assert.ThrowsAsync<NetSuiteException>(() => connection.GetRecordDefinitionAsync("employee"));
-            Assert.That(_fake.Requests, Is.Empty);
-        }
-
-        [Test]
-        public async Task レコードの定義はmetadata_catalogから1回だけ読む()
-        {
-            var connection = Create();
-            var definition = await connection.GetRecordDefinitionAsync("customer");
-            var first = _fake.Requests.Count(e => e.IsMetadata);
-            await connection.GetRecordDefinitionAsync("CUSTOMER");
+            var definition = await Create().FetchRecordDefinitionAsync("customer", "customer");
             Assert.That(definition.FindByColumn("companyname"), Is.Not.Null);
-            //2 回目は送らない
-            Assert.That(_fake.Requests.Count(e => e.IsMetadata), Is.EqualTo(first));
             //明細の $ref の先 (customer-addressBookCollection) を除くと、レコードの定義の 1 回
             var metadata = _fake.Requests.Where(e => e.IsMetadata && !e.Path.EndsWith("Collection")).ToList();
             Assert.That(metadata, Has.Count.EqualTo(1));
             Assert.That(metadata[0].Method, Is.EqualTo(HttpMethod.Get));
             Assert.That(metadata[0].Url, Is.EqualTo(FakeNetSuite.RestUrl + "/record/v1/metadata-catalog/customer"));
             Assert.That(metadata[0].Header("Accept"), Is.EqualTo("application/schema+json"));
+        }
+
+        const string SimpleSchema = """{ "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" } } }""";
+
+        [Test]
+        public async Task 全レコードの定義はレコード種別の一覧から読みSuiteQLで読めるものと対応表の取引だけを小文字の名前で返す()
+        {
+            _fake.Schemas["Employee"] = SimpleSchema;
+            _fake.Schemas["salesOrder"] = SimpleSchema;
+            _fake.Schemas["vendor"] = SimpleSchema;
+            _fake.Schemas["customrecord_gone"] = SimpleSchema;
+            _fake.Schemas["bad name"] = SimpleSchema;
+            //vendor は SuiteQL に表が無い (REST だけのレコード・対応表に無い取引と同じ)
+            _fake.Override(e => e.IsSuiteQl && e.Body.Contains("from vendor"), _ => FakeNetSuite.ErrorDetails(HttpStatusCode.BadRequest, ("Invalid search query.", "INVALID_PARAMETER", "")));
+            //customrecord_gone は一覧にあっても定義が読めない
+            _fake.Override(e => e.IsMetadata && e.Path.EndsWith("/customrecord_gone"), _ => FakeNetSuite.ErrorDetails(HttpStatusCode.NotFound, ("Record type not found.", "NONEXISTENT_ID", "")));
+
+            var records = await Create().FetchRecordDefinitionsAsync();
+
+            Assert.That(records.Select(e => e.Name), Is.EqualTo(new[] { "customer", "employee", "salesorder", "subsidiary" }));
+            Assert.That(_fake.Requests.Count(e => e.IsMetadataCatalog), Is.EqualTo(1));
+            //取引 (対応表にある salesorder) は SuiteQL で確かめない。名前に使えない文字の入ったものは要求を送らない
+            var probes = _fake.Requests.Where(e => e.IsSuiteQl).ToList();
+            Assert.That(probes.Select(e => e.Json!["q"]!.GetValue<string>()).OrderBy(e => e, StringComparer.Ordinal),
+                Is.EqualTo(new[] { "select id from customer", "select id from customrecord_gone", "select id from employee", "select id from subsidiary", "select id from vendor" }));
+            Assert.That(probes.All(e => e.Query("limit") == "1" && e.Query("offset") == "0"), Is.True);
+            //定義は一覧の名前のまま (大文字を含む) で読む
+            Assert.That(_fake.Requests.Where(e => e.IsMetadata).Select(e => e.Path.Split('/').Last()), Does.Contain("salesOrder").And.Contain("Employee").And.Not.Contain("vendor"));
+        }
+
+        [TestCase(HttpStatusCode.InternalServerError, NetSuiteErrorKind.ServiceUnavailable, TestName = "サーバー側の失敗")]
+        [TestCase(HttpStatusCode.Unauthorized, NetSuiteErrorKind.Authentication, TestName = "認証の失敗")]
+        public void 全レコードの定義の読み出しは飛ばす失敗以外で止まる(HttpStatusCode code, NetSuiteErrorKind kind)
+        {
+            _fake.Override(e => e.IsSuiteQl && e.Body.Contains("from subsidiary"), _ => FakeNetSuite.Status(code), times: 2);
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => Create().FetchRecordDefinitionsAsync());
+            Assert.That(ex!.Kind, Is.EqualTo(kind));
+        }
+
+        [Test]
+        public void 止める失敗が出たらまだ始めていないレコード種別の要求は送らない()
+        {
+            for (var i = 0; i < 200; i++) _fake.Schemas[$"customrecord_r{i:D3}"] = SimpleSchema;
+            var types = _fake.Schemas.Keys.Count(e => !e.Contains('-'));
+            //SuiteQL がずっと通信の失敗 (読み出しなので、始めた種別はそれぞれ再試行をやり切る)
+            _fake.Throw(e => e.IsSuiteQl, () => new HttpRequestException("connection reset"), int.MaxValue);
+            var connection = Create();
+
+            var ex = Assert.ThrowsAsync<NetSuiteException>(() => connection.FetchRecordDefinitionsAsync());
+
+            Assert.That(ex!.Kind, Is.EqualTo(NetSuiteErrorKind.ServiceUnavailable));
+            //全部の種別を始めると「種別 × 再試行の回数」の要求になる。始めたのは同時実行の数ほどだけ
+            var started = _fake.Requests.Where(e => e.IsSuiteQl).Select(e => e.Json!["q"]!.GetValue<string>()).Distinct().Count();
+            Assert.That(started, Is.LessThanOrEqualTo(connection.Settings.MaxConcurrency * 2));
+            Assert.That(_fake.ApiRequests, Has.Count.LessThan(types * 2 / 4));
+        }
+
+        const string SalesOrderWithItemSchema = """
+            {"type":"object","properties":{"id":{"type":"string"},"memo":{"type":"string"},
+              "item":{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer"},"quantity":{"type":"number"}}}}}}}}
+            """;
+
+        [Test]
+        public async Task 明細の表と同じ名前のレコードがあれば明細の表を採る()
+        {
+            _fake.Schemas["salesOrder"] = SalesOrderWithItemSchema;
+            //明細の表 (salesorder_item) と同じ名前の、SuiteQL で読めるレコード
+            _fake.Schemas["salesorder_item"] = SimpleSchema;
+
+            var records = await Create().FetchRecordDefinitionsAsync();
+
+            Assert.That(records.Select(e => e.Name), Is.EqualTo(new[] { "customer", "salesorder", "salesorder_item", "subsidiary" }));
+            var table = records.Single(e => e.Name == "salesorder_item");
+            Assert.That(table.IsLineTable, Is.True);
+            Assert.That((table.LineParent, table.LineSublist), Is.EqualTo(("salesorder", "item")));
+            Assert.That(table.Fields.Select(e => e.Column), Is.EqualTo(new[] { "uniquekey", "transaction", "linesequencenumber", "quantity" }));
         }
 
         // ---------------------------------------------------------------- 書き込みの要求

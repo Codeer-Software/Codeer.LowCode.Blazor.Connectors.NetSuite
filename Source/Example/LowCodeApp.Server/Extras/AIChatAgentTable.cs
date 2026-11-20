@@ -63,7 +63,7 @@ namespace LowCodeApp.Server.Extras
                 userId =>
                 {
                     var dataService = new DataService(userId);
-                    return Task.FromResult(new ModuleDataAccessScope(dataService.ModuleDataIO, dataService, dataService.DbAccess));
+                    return Task.FromResult(new ModuleDataAccessScope(dataService.ModuleDataIO, dataService, dataService.ModuleDbAccess));
                 },
                 () => AppDesign.Store.GetDesignData(),
                 folder => DesignDataFileManager.GetResourceTexts(config.DesignFileDirectory, folder, ".md", ".txt").Select(e => new AIChatDocument(e.Name, e.Text)).ToList(),

@@ -132,7 +132,6 @@ public class NetSuiteLoginTest
     }
 
     [Test]
-    [Ignore("ホストの結線待ち: Example の ExternalLoginUserResolver などはユーザー行を DataService.DbAccess (NetSuite を包む前の DbAccessor) で読むので、NetSuite のユーザーモジュールを読めない。DataService.DbAccess を IDbAccessor にすると ModuleDataController の DbAccess.ClearAsync() がコンパイルできない")]
     public async Task 方式2_ユーザーモジュールをEmployeeにするとNetSuiteの従業員がそのまま現在のユーザーになる()
     {
         //デザインの写しで、ユーザーモジュールを Employee に替える

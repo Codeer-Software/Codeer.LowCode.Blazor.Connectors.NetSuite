@@ -34,7 +34,7 @@ namespace LowCodeApp.Server.Controllers
             {
                 ModuleDataIO = _dataService.ModuleDataIO,
                 DesignData = _dataService.Design.DesignData,
-                DbAccess = _dataService.DbAccess,
+                DbAccess = _dataService.ModuleDbAccess,
                 UserId = await _dataService.GetCurrentUserIdAsync(),
                 Logger = _logger,
             });

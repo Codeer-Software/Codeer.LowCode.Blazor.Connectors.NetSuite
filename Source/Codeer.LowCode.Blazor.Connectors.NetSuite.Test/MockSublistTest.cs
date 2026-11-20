@@ -28,7 +28,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         public async Task TearDown() => await _h.DisposeAsync();
 
         internal static Task<MockHarness> StartAsync()
-            => MockHarness.StartAsync(null, e => e.Records.AddRange(new[] { "item", "salesorder" }), AddModules);
+            => MockHarness.StartAsync(null, null, AddModules);
 
         //受注 (Order) と、明細の行モジュール (OrderLine: ルートの JsonField + ノードに結線したフィールド)
         internal static void AddModules(DesignData d)
@@ -134,7 +134,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(column.NetTypeFullName, Is.EqualTo(typeof(string).FullName));
             Assert.That(column.RawDbTypeName, Is.EqualTo("CLOB"));
 
-            var definition = await _h.Connection.GetRecordDefinitionAsync("salesorder");
+            var definition = await _h.Connection.FetchRecordDefinitionAsync("salesorder", "salesorder");
             var sublist = definition.FindByColumn("item")!;
             Assert.That(sublist.Kind, Is.EqualTo(NetSuiteFieldKind.Sublist));
             Assert.That(sublist.SublistFields.ToDictionary(e => e.RestName, e => e.Kind), Is.EquivalentTo(new Dictionary<string, NetSuiteFieldKind>
@@ -402,23 +402,117 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(rest["item"]!["items"]![0]!["rate"]!.GetValue<decimal>(), Is.EqualTo(13.5m));
         }
 
+        /// <summary>コネクターを通さずに REST で受注を更新する (別の利用者・NetSuite の画面での変更の代わり)。</summary>
+        async Task PatchRestAsync(string id, string body, string query = "")
+        {
+            using var client = _h.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Patch, $"/services/rest/record/v1/salesOrder/{id}{query}") { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+            request.Headers.Authorization = new("Bearer", await MockServerTest.GetTokenAsync(client));
+            using var response = await client.SendAsync(request);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        }
+
         [Test]
-        public async Task 今の明細に無いlineの行と同じlineの2つ目は新しい行として送る()
+        public async Task 読んだ行の印を行に入れる()
+        {
+            var order = await ReadOrderAsync("3");
+            var json = Lines(order).Select(e => JsonNode.Parse(Field<JsonFieldData>(e, "Json")!.Value!)!).ToList();
+            Assert.That(json.Select(e => e[NetSuiteSublistJson.ReadLinesKey]!.GetValue<string>()), Has.All.EqualTo("1,2,3"));
+        }
+
+        [Test]
+        public async Task 読んだ後にほかで足された行は_数量の変更でも行の削除でも消さない()
+        {
+            //A が読む → B が行を足す → A が 1 行目の数量を変えて保存
+            var order = await ReadOrderAsync("3");
+            await PatchRestAsync("3", """{"item":{"items":[{"item":{"id":"5"},"quantity":9}]}}""");
+            var items = Field<ListFieldData>(order, "Items")!;
+            Field<NumberFieldData>(items.Children[0], "Quantity")!.Value = 30;
+
+            var result = await UpdateAsync("3", items);
+
+            Assert.That(result.ExceptionMessage, Is.Empty);
+            Assert.That((Patches.Single().Query, Patches.Single().Body), Is.EqualTo((string.Empty, """{"item":{"items":[{"line":1,"quantity":30}]}}""")));
+            var lines = await RestLinesAsync("3");
+            Assert.That(lines.Select(e => (e["line"]!.GetValue<long>(), e["item"]!["id"]!.GetValue<string>())), Is.EqualTo(new[] { (1L, "3"), (2L, "1"), (3L, "4"), (4L, "5") }));
+            Assert.That(lines[0]["quantity"]!.GetValue<decimal>(), Is.EqualTo(30m));
+
+            //A がもう一度読む前に (読んだときは 1・2・3 の行) 2 行目を消して保存しても、B の行 (4) は残る
+            items.Children.RemoveAt(1);
+            result = await UpdateAsync("3", items);
+
+            Assert.That(result.ExceptionMessage, Is.Empty);
+            var patch = Patches.Single();
+            Assert.That(patch.Query, Is.EqualTo("?replace=item"));
+            Assert.That(patch.Body, Is.EqualTo("""{"item":{"items":[{"line":1},{"line":3},{"line":4}]}}"""));
+            lines = await RestLinesAsync("3");
+            Assert.That(lines.Select(e => (e["line"]!.GetValue<long>(), e["item"]!["id"]!.GetValue<string>())), Is.EqualTo(new[] { (1L, "3"), (3L, "4"), (4L, "5") }));
+        }
+
+        [Test]
+        public async Task 読んだ後にほかで消された行を変えて保存するとConflictで何も送らない()
+        {
+            //A が読む → B が 2 行目を消す → A が 2 行目の数量を変えて保存
+            var order = await ReadOrderAsync("3");
+            await PatchRestAsync("3", """{"item":{"items":[{"line":1},{"line":3}]}}""", "?replace=item");
+            var items = Field<ListFieldData>(order, "Items")!;
+            Field<NumberFieldData>(items.Children[1], "Quantity")!.Value = 99;
+
+            var result = await UpdateAsync("3", items);
+
+            Assert.That(result.ExceptionMessage, Does.Contain("Line 2").And.Contain("was deleted in NetSuite after it was read"));
+            Assert.That(result.Exception, Is.TypeOf<NetSuiteException>().With.Property(nameof(NetSuiteException.Kind)).EqualTo(NetSuiteErrorKind.Conflict));
+            Assert.That(Patches, Is.Empty);
+            //消された行は戻らない
+            Assert.That((await RestLinesAsync("3")).Select(e => e["line"]!.GetValue<long>()), Is.EqualTo(new long[] { 1, 3 }));
+        }
+
+        [Test]
+        public async Task 同じlineの行が2つあると入力のエラーで何も送らない()
         {
             var order = await ReadOrderAsync("2");
             var items = Field<ListFieldData>(order, "Items")!;
             var copy = NewLine("1", 1);
             copy.Fields["Json"] = new JsonFieldData { Value = """{"line":1}""" };
             items.Children.Add(copy);
-            var gone = NewLine("4", 2);
-            gone.Fields["Json"] = new JsonFieldData { Value = """{"line":99}""" };
-            items.Children.Add(gone);
 
             var result = await UpdateAsync("2", items);
 
-            Assert.That(result.ExceptionMessage, Is.Empty);
-            Assert.That(Patches.Single().Body, Is.EqualTo("""{"item":{"items":[{"item":{"id":"1"},"quantity":1},{"item":{"id":"4"},"quantity":2}]}}"""));
-            Assert.That(await RestLinesAsync("2"), Has.Count.EqualTo(3));
+            Assert.That(result.ExceptionMessage, Does.Contain("Line 1").And.Contain("more than once"));
+            Assert.That(result.Exception, Is.TypeOf<NetSuiteException>().With.Property(nameof(NetSuiteException.Kind)).EqualTo(NetSuiteErrorKind.InvalidRequest));
+            Assert.That(Patches, Is.Empty);
+            Assert.That(await RestLinesAsync("2"), Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void 読み取り専用の行の項目は_新しい行でも今ある行でも送らずエラーにしない()
+        {
+            var sublist = new NetSuiteFieldDefinition
+            {
+                RestName = "item",
+                Column = "item",
+                Kind = NetSuiteFieldKind.Sublist,
+                SublistFields =
+                {
+                    new NetSuiteFieldDefinition { RestName = "line", Column = "line", Kind = NetSuiteFieldKind.Integer },
+                    new NetSuiteFieldDefinition { RestName = "quantity", Column = "quantity", Kind = NetSuiteFieldKind.Number },
+                    new NetSuiteFieldDefinition { RestName = "amount", Column = "amount", Kind = NetSuiteFieldKind.Number, IsReadOnly = true },
+                },
+            };
+            var insert = NetSuiteSublistJson.CreateInsertItems(sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"quantity":2,"amount":200}]"""));
+            Assert.That(insert.ToJsonString(), Is.EqualTo("""{"items":[{"quantity":2}]}"""));
+
+            using var current = System.Text.Json.JsonDocument.Parse("""{"item":{"items":[{"line":1,"quantity":1,"amount":100}]}}""");
+            //読んだままの値 (変えていない) は送らない・新しい行の値も送らない
+            var same = NetSuiteSublistJson.CreateUpdateItems("salesorder", sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":1,"quantity":3,"amount":100},{"quantity":1,"amount":5}]"""), current.RootElement);
+            Assert.That(same.Items!.ToJsonString(), Is.EqualTo("""{"items":[{"line":1,"quantity":3},{"quantity":1}]}"""));
+            //今ある行の読み取り専用の項目が今の値と違っても (読んだ後に NetSuite の再計算・ほかの人の保存で変わった) 比べずに送らない
+            var differs = NetSuiteSublistJson.CreateUpdateItems("salesorder", sublist,
+                NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":1,"quantity":1,"amount":150}]"""), current.RootElement);
+            Assert.That(differs.Items, Is.Null);
+            var withChange = NetSuiteSublistJson.CreateUpdateItems("salesorder", sublist,
+                NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":1,"quantity":4,"amount":150}]"""), current.RootElement);
+            Assert.That(withChange.Items!.ToJsonString(), Is.EqualTo("""{"items":[{"line":1,"quantity":4}]}"""));
         }
 
         [Test]
@@ -440,9 +534,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(insert.ToJsonString(), Is.EqualTo("""{"items":[{"at":"2026-11-14T13:45:00Z","who":{"id":"3"}}]}"""));
 
             using var current = System.Text.Json.JsonDocument.Parse("""{"time":{"items":[{"line":1,"at":"2026-11-14T13:45:00Z","who":{"id":"3","refName":"A"}}]}}""");
-            var same = NetSuiteSublistJson.CreateUpdateItems(sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":1,"at":"2026-11-14T22:45:00+09:00","who":"3"}]"""), current.RootElement);
+            var same = NetSuiteSublistJson.CreateUpdateItems("salesorder", sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":1,"at":"2026-11-14T22:45:00+09:00","who":"3"}]"""), current.RootElement);
             Assert.That(same.Items, Is.Null);
-            var changed = NetSuiteSublistJson.CreateUpdateItems(sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":"1","at":"2026-11-14T14:00:00","who":"4"}]"""), current.RootElement);
+            var changed = NetSuiteSublistJson.CreateUpdateItems("salesorder", sublist, NetSuiteSublistJson.ParseColumnValue(sublist, """[{"line":"1","at":"2026-11-14T14:00:00","who":"4"}]"""), current.RootElement);
             //行の line は文字で来ても整数にそろえて送る
             Assert.That(changed.Items!.ToJsonString(), Is.EqualTo("""{"items":[{"line":1,"at":"2026-11-14T14:00:00Z","who":{"id":"4"}}]}"""));
             Assert.That(changed.Replace, Is.False);

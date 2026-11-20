@@ -45,14 +45,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
 
         static NetSuiteHarness CreateHarness()
         {
-            var h = new NetSuiteHarness(e => e.Records.Add("customrecord_deal"), AddModules);
-            h.Fake.Schemas["customrecord_deal"] = DealSchema;
-            //Records に無いレコード (定義は NetSuite にあっても読ませない)
+            var h = new NetSuiteHarness(null, AddModules, fake => fake.Schemas["customrecord_deal"] = DealSchema);
+            //メタ情報のファイルに無いレコード (定義は NetSuite にあっても読ませない)
             h.Fake.Schemas["employee"] = EmployeeSchema;
             return h;
         }
 
-        /// <summary>Deal (customrecord_deal) と、Records に無いレコードのモジュール。</summary>
+        /// <summary>Deal (customrecord_deal) と、メタ情報のファイルに無いレコードのモジュール。</summary>
         static void AddModules(DesignData d)
         {
             var modules = (IEditableModuleDesign)d.Modules;
@@ -665,7 +664,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public void Recordsに無いレコードの集計は要求を出さずに拒否する()
+        public void メタ情報のファイルに無いレコードの集計は要求を出さずに拒否する()
         {
             Assert.That(async () => await AggregateAsync(new AggregateCondition("Employee") { Measures = { Measure(AggregateFunction.Count) } }),
                 Throws.InstanceOf<NetSuiteException>().With.Message.Contains("employee"));

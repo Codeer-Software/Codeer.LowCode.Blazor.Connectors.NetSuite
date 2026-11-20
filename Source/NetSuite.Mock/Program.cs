@@ -38,7 +38,9 @@ app.Lifetime.ApplicationStarted.Register(() =>
     {
         ["Name"] = "NetSuite",
         ["DataSourceType"] = "Oracle",
-        ["ConnectionString"] = $"Provider=NetSuite;ServiceUrl={serviceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={keyPath};Records={string.Join(",", mock.Records.Select(e => e.Name))}",
+        ["ConnectionString"] = $"Provider=NetSuite;ServiceUrl={serviceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={keyPath}" +
+            //添付ファイル (mock-data.json のフォルダと保存検索)
+            ";AttachmentFolderId=100;AttachmentSavedSearchId=customsearch_clb_transaction_files;AttachmentSearchFileColumn=file_internalid;AttachmentSearchFileNameColumn=file_name;AttachmentSearchFileSizeColumn=file_documentsize;AttachmentSearchFileTypeColumn=file_filetype",
     };
     var json = JsonSerializer.Serialize(dataSource, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 

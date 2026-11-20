@@ -1,4 +1,5 @@
 using Codeer.LowCode.Bindings.ApexCharts;
+using Codeer.LowCode.Blazor.Connectors.NetSuite;
 using Codeer.LowCode.Blazor.DbAccess;
 using Codeer.LowCode.Blazor.Extras;
 using Codeer.LowCode.Blazor.Json;
@@ -22,6 +23,8 @@ using Microsoft.AspNetCore.SignalR;
 typeof(CodeBehindSample).ToString();
 ApexChartsServerInitializer.Initialize();
 ExtrasServerInitializer.Initialize();
+//NetSuite の添付ファイルのフィールド (サーバーもデザインを読むので型が要る)
+NetSuiteFieldsInitializer.Initialize();
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 

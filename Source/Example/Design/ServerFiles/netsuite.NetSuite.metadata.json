@@ -19,9 +19,31 @@
           "Required": false
         },
         {
+          "Name": "dateCreated",
+          "Kind": "DateTime",
+          "Required": false,
+          "ReadOnly": true
+        },
+        {
           "Name": "email",
           "Kind": "String",
           "Required": false
+        },
+        {
+          "Name": "emailPreference",
+          "Kind": "Reference",
+          "Required": false,
+          "Choices": [
+            {
+              "Value": "_default"
+            },
+            {
+              "Value": "_hTML"
+            },
+            {
+              "Value": "_pDF"
+            }
+          ]
         },
         {
           "Name": "isInactive",

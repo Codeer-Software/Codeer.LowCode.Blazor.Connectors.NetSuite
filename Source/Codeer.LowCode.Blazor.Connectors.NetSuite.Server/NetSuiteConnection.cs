@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 {
     /// <summary>
-    /// NetSuite への接続 1 つ。アクセストークン・レコードの定義・同時実行の枠を持つので、アプリの中で使い回す
+    /// NetSuite への接続 1 つ。アクセストークン・同時実行の枠を持つので、アプリの中で使い回す
     /// (<see cref="FromDataSources"/> は同じ設定に同じ接続を返す)。
     /// </summary>
     public sealed class NetSuiteConnection
@@ -19,7 +19,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         readonly HttpClient _http;
         readonly SemaphoreSlim _concurrency;
         readonly SemaphoreSlim _tokenLock = new(1, 1);
-        readonly ConcurrentDictionary<string, NetSuiteRecordDefinition> _records = new(StringComparer.OrdinalIgnoreCase);
         string _accessToken = string.Empty;
         DateTime _accessTokenExpiresAt;
 
@@ -56,46 +55,91 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         string RestUrl => Settings.ServiceUrl + "/services/rest";
 
-        //明細の表になりうる名前 (<Records の取引>_...) は、Records に書かれていてもレコードとして扱わない (読み取り専用の明細の表のまま)
-        internal bool IsAllowedRecord(string recordType)
-            => Settings.Records.Contains(recordType, StringComparer.OrdinalIgnoreCase) && !Settings.Records.Any(e => IsLineTableCandidate(recordType, e));
+        // ---------------------------------------------------------------- レコードの定義 (メタ情報の更新のときだけ読む)
 
-        void CheckAllowedRecord(string recordType)
+        //取り込みを飛ばす失敗 (そのレコードが無い・読めない・SuiteQL の表が無い)。通信の失敗・認証の失敗はそのまま上げる (更新ごと止める)
+        static bool IsUnreadable(NetSuiteException e) => e.Kind is NetSuiteErrorKind.NotFound or NetSuiteErrorKind.InvalidRequest or NetSuiteErrorKind.PermissionDenied;
+
+        /// <summary>
+        /// アカウントの全部のレコード種別の定義を NetSuite から読む (メタ情報の更新用。要求の数はレコード種別の数の 2 倍ほど)。
+        /// 取り込むのは、取引の対応表にある取引と、SuiteQL に同じ名前の表があるレコード (コネクターが一覧・検索で読めるもの)。
+        /// 対応表に無い取引・SuiteQL の表が無いレコード・定義が読めないレコードは入れない。取引の後ろに、その明細の表を並べる。表名は小文字。
+        /// </summary>
+        internal async Task<List<NetSuiteRecordDefinition>> FetchRecordDefinitionsAsync()
         {
-            if (!IsAllowedRecord(recordType)) throw NotListed(recordType);
+            var names = await FetchRecordTypesAsync();
+            //止める失敗 (通信・認証) が出たら、まだ始めていないレコードは読まない (残りの全部が再試行をやり切るのを待たない)
+            var fetched = new NetSuiteRecordDefinition?[names.Count];
+            await Parallel.ForEachAsync(Enumerable.Range(0, names.Count), new ParallelOptions { MaxDegreeOfParallelism = Settings.MaxConcurrency },
+                async (i, _) => fetched[i] = await FetchReadableRecordDefinitionAsync(names[i]));
+            var records = fetched.OfType<NetSuiteRecordDefinition>()
+                .GroupBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(e => e.First()).ToList();
+            //明細の表と同じ名前のレコードは入れない (その名前は読み取り専用の明細の表)
+            var lineTables = records.SelectMany(e => e.CreateLineTables()).GroupBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(e => e.Key, e => e.First(), StringComparer.OrdinalIgnoreCase);
+            var list = new List<NetSuiteRecordDefinition>();
+            foreach (var record in records.Where(e => !lineTables.ContainsKey(e.Name)).OrderBy(e => e.Name, StringComparer.Ordinal))
+            {
+                list.Add(record);
+                foreach (var line in record.CreateLineTables())
+                {
+                    if (lineTables.Remove(line.Name, out var table)) list.Add(table);
+                }
+            }
+            return list;
         }
 
-        NetSuiteException NotListed(string recordType)
-            => new($"NetSuite data source '{Settings.Name}': record type '{recordType}' is not listed in Records.");
-
-        // ---------------------------------------------------------------- レコードの定義
-
-        /// <summary>SuiteQL で読める表の名前か (Records のレコードと、その取引の明細の表になりうる名前)。明細の表かどうかは定義を読んで確かめる。</summary>
-        internal bool IsReadableTable(string name)
-            => IsAllowedRecord(name) || Settings.Records.Any(e => IsLineTableCandidate(name, e));
-
-        static bool IsLineTableCandidate(string name, string parent)
-            => SuiteQlTranslator.GetTransactionType(parent) != null && parent.Length + 1 < name.Length && name.StartsWith(parent + "_", StringComparison.OrdinalIgnoreCase);
-
-        /// <summary>レコード (Records に書いたもの) か、明細の表 (&lt;取引のレコード名&gt;_&lt;明細の列名&gt;) の定義。</summary>
-        internal async Task<NetSuiteRecordDefinition> GetRecordDefinitionAsync(string recordType)
+        /// <summary>レコード種別の名前の一覧 (GET record/v1/metadata-catalog)。</summary>
+        async Task<List<string>> FetchRecordTypesAsync()
         {
-            if (!IsAllowedRecord(recordType)) return await GetLineTableDefinitionAsync(recordType);
-            //定義は接続が生きている間持つ (本体も表の定義をプロセスの間持つ。NetSuite 側の項目を変えたらアプリを再起動する)
-            if (_records.TryGetValue(recordType, out var cached)) return cached;
+            using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get, $"{RestUrl}/record/v1/metadata-catalog"), true);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var names = new List<string>();
+            if (json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String && name.GetString() is { Length: > 0 } text)
+                        names.Add(text);
+                }
+            }
+            return names;
+        }
 
+        //取り込むレコードなら定義 (表名は小文字)。取り込まないなら null
+        async Task<NetSuiteRecordDefinition?> FetchReadableRecordDefinitionAsync(string recordType)
+        {
+            var table = recordType.ToLowerInvariant();
+            if (!NetSuiteRecordDefinition.IsCatalogName(recordType) || !SuiteQlTranslator.IsIdentifier(table)) return null;
+            try
+            {
+                //取引は対応表で transaction の表に読み替える。ほかは SuiteQL に同じ名前の表があるものだけ (対応表に無い取引は SuiteQL の表が無いので入らない)
+                if (SuiteQlTranslator.GetTransactionType(table) == null) await QuerySuiteQlAsync($"select id from {table}", new(), 1, 0);
+                return await FetchRecordDefinitionAsync(recordType, table);
+            }
+            catch (NetSuiteException e) when (IsUnreadable(e))
+            {
+                return null;
+            }
+        }
+
+        /// <summary>レコード種別 1 つの定義を NetSuite から読む。</summary>
+        /// <param name="recordType">metadata-catalog の名前。</param>
+        /// <param name="table">定義の名前 (表名)。</param>
+        internal async Task<NetSuiteRecordDefinition> FetchRecordDefinitionAsync(string recordType, string table)
+        {
             using var json = await GetSchemaAsync(recordType);
             //明細の行の定義 ($ref の先) は同じ metadata-catalog から読む。無ければその明細は列にしない
-            var definition = await NetSuiteRecordDefinition.FromJsonSchemaAsync(recordType, json.RootElement, async name =>
+            return await NetSuiteRecordDefinition.FromJsonSchemaAsync(table, json.RootElement, async name =>
             {
                 try
                 {
                     using var target = await GetSchemaAsync(name);
                     return target.RootElement.Clone();
                 }
-                catch (NetSuiteException e) when (e.Kind is NetSuiteErrorKind.NotFound or NetSuiteErrorKind.InvalidRequest or NetSuiteErrorKind.PermissionDenied)
+                catch (NetSuiteException e) when (IsUnreadable(e))
                 {
-                    //明細の定義が読めないだけで、レコードごと使えなくしない (通信の失敗・認証の失敗はそのまま上げる)
+                    //明細の定義が読めないだけで、レコードごと使えなくしない
                     return null;
                 }
                 catch (JsonException)
@@ -104,20 +148,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     return null;
                 }
             });
-            _records[recordType] = definition;
-            return definition;
-        }
-
-        //明細の表。名前は Records のレコード名 + _ + そのレコードの明細の列名で照合する (レコード名に _ が入るものがあるので分割しない)
-        async Task<NetSuiteRecordDefinition> GetLineTableDefinitionAsync(string name)
-        {
-            if (_records.TryGetValue(name, out var cached) && cached.IsLineTable) return cached;
-            foreach (var parent in Settings.Records.Where(e => IsLineTableCandidate(name, e)))
-            {
-                var line = (await GetRecordDefinitionAsync(parent)).CreateLineTables().FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
-                if (line != null) return _records.GetOrAdd(line.Name, line);
-            }
-            throw NotListed(name);
         }
 
         async Task<JsonDocument> GetSchemaAsync(string name)
@@ -129,26 +159,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 return request;
             }, true);
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        }
-
-        internal async Task<List<NetSuiteRecordDefinition>> GetRecordDefinitionsAsync()
-        {
-            //取引のレコードの後ろに、その明細の表を並べる
-            var list = new List<NetSuiteRecordDefinition>();
-            foreach (var record in Settings.Records.Where(IsAllowedRecord))
-            {
-                var definition = await GetRecordDefinitionAsync(record);
-                list.Add(definition);
-                foreach (var line in definition.CreateLineTables()) list.Add(_records.GetOrAdd(line.Name, line));
-            }
-            return list;
-        }
-
-        /// <summary>持っている定義を捨てて、Records のレコードの定義を NetSuite から取り直す。</summary>
-        internal async Task<List<NetSuiteRecordDefinition>> ReloadRecordDefinitionsAsync()
-        {
-            _records.Clear();
-            return await GetRecordDefinitionsAsync();
         }
 
         // ---------------------------------------------------------------- SuiteQL
@@ -216,7 +226,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>レコードを明細つきで読む (GET record/v1/{type}/{id}?expandSubResources=true)。対象が無ければ null。</summary>
         internal async Task<JsonDocument?> GetRecordAsync(string recordType, string id)
         {
-            CheckAllowedRecord(recordType);
             try
             {
                 using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get,
@@ -234,7 +243,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>レコードを作り、NetSuite が採番した internal ID を返す。</summary>
         internal async Task<string> CreateRecordAsync(string recordType, byte[] json)
         {
-            CheckAllowedRecord(recordType);
             using var response = await SendAsync(() => CreateWriteRequest(HttpMethod.Post, $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}", json), false);
             var location = response.Headers.Location?.ToString() ?? string.Empty;
             var id = location.TrimEnd('/').Split('/').LastOrDefault() ?? string.Empty;
@@ -247,7 +255,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <param name="replace">要求に無い行を消す明細の REST 名 (?replace=)。空なら付けない。</param>
         internal async Task<bool> UpdateRecordAsync(string recordType, string id, byte[] json, IReadOnlyCollection<string>? replace = null)
         {
-            CheckAllowedRecord(recordType);
             var url = $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(id)}";
             if (replace != null && replace.Count != 0) url += "?replace=" + string.Join(",", replace.Select(Uri.EscapeDataString));
             try
@@ -264,7 +271,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         /// <summary>レコードを削除する。対象が無ければ false。</summary>
         internal async Task<bool> DeleteRecordAsync(string recordType, string id)
         {
-            CheckAllowedRecord(recordType);
             try
             {
                 using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Delete, $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(id)}"), false);
@@ -274,6 +280,168 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             {
                 return false;
             }
+        }
+
+        // ---------------------------------------------------------------- 添付ファイル (文書サービスと !attach / !detach・保存検索)
+
+        /// <summary>保存検索の結果を 1 回の要求で読む行数 (テストで小さくする)。</summary>
+        internal int SavedSearchPageSize { get; set; } = 1000;
+
+        //NetSuite のページ送りの上限 (1000 ページ)
+        const int MaxSavedSearchPages = 1000;
+
+        /// <summary>
+        /// 接続の保存検索 (<see cref="NetSuiteConnectionSettings.AttachmentSavedSearchId"/>) を最後のページまで実行し、
+        /// <paramref name="recordIds"/> のレコードに付いているファイルを返す (レコードの internal ID → ファイル。保存検索の結果の並び。同じ組は 1 つ)。
+        /// 保存検索を設定していなければ空。読めない (HTTP の失敗・結果の形が違う・取引の ID の列が無い) ときは NetSuiteException (0 件として返さない)。
+        /// </summary>
+        internal async Task<Dictionary<string, List<NetSuiteAttachedFile>>> ReadAttachedFilesAsync(IReadOnlyCollection<string> recordIds)
+        {
+            var result = new Dictionary<string, List<NetSuiteAttachedFile>>(StringComparer.Ordinal);
+            if (!Settings.HasAttachmentSavedSearch || recordIds.Count == 0) return result;
+            var targets = recordIds.ToHashSet(StringComparer.Ordinal);
+            var seen = new HashSet<(string, string)>();
+            var search = Settings.AttachmentSavedSearchId;
+            var limit = Math.Max(1, SavedSearchPageSize);
+            for (int page = 0, offset = 0; ; page++, offset += limit)
+            {
+                if (MaxSavedSearchPages <= page)
+                    throw new NetSuiteException($"Saved search '{search}' returned more than {MaxSavedSearchPages} pages. Narrow the criteria of the saved search.", NetSuiteErrorKind.InvalidRequest);
+                JsonDocument json;
+                try
+                {
+                    using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get,
+                        $"{RestUrl}/query/v1/savedsearch/{Uri.EscapeDataString(search)}/result?limit={limit}&offset={offset}"), true);
+                    json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                }
+                catch (NetSuiteException e)
+                {
+                    throw new NetSuiteException($"The attached files could not be read with saved search '{search}'. {e.Message}", e.Kind, e);
+                }
+                catch (JsonException e)
+                {
+                    throw new NetSuiteException($"The attached files could not be read with saved search '{search}': the response is not JSON.", NetSuiteErrorKind.ServiceUnavailable, e);
+                }
+                using (json)
+                {
+                    var root = json.RootElement;
+                    if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                        throw new NetSuiteException($"The attached files could not be read with saved search '{search}': the response has no items.", NetSuiteErrorKind.ServiceUnavailable);
+                    var count = 0;
+                    foreach (var item in items.EnumerateArray())
+                    {
+                        count++;
+                        if (item.ValueKind != JsonValueKind.Object) continue;
+                        var recordId = FindValue(item, Settings.AttachmentSearchRecordColumn, false);
+                        //取引の行には必ず ID がある。無ければ列の名前の設定が違う (黙って 0 件にしない)
+                        if (recordId == null)
+                            throw new NetSuiteException($"Saved search '{search}' does not return the column '{Settings.AttachmentSearchRecordColumn}' " +
+                                $"({nameof(NetSuiteConnectionSettings.AttachmentSearchRecordColumn)} of NetSuite data source '{Settings.Name}').", NetSuiteErrorKind.InvalidRequest);
+                        if (!targets.Contains(recordId)) continue;
+                        //ファイルの無い行 (保存検索で絞っていない) は飛ばす
+                        var fileId = FindValue(item, Settings.AttachmentSearchFileColumn, false);
+                        if (!NetSuiteAttachments.IsFileId(fileId) || !seen.Add((recordId, fileId!))) continue;
+                        var name = FindValue(item, Settings.AttachmentSearchFileNameColumn, true);
+                        var size = string.IsNullOrEmpty(Settings.AttachmentSearchFileSizeColumn) ? null : NetSuiteAttachments.ParseSize(FindValue(item, Settings.AttachmentSearchFileSizeColumn, false));
+                        var type = string.IsNullOrEmpty(Settings.AttachmentSearchFileTypeColumn) ? null : FindValue(item, Settings.AttachmentSearchFileTypeColumn, true);
+                        if (!result.TryGetValue(recordId, out var files)) result[recordId] = files = new();
+                        files.Add(new NetSuiteAttachedFile(fileId!, string.IsNullOrEmpty(name) ? fileId! : name, size, type));
+                    }
+                    var hasMore = root.TryGetProperty("hasMore", out var more) && more.ValueKind == JsonValueKind.True;
+                    if (!hasMore) return result;
+                    //続きがあると言いながら行が無ければ、最後まで読めない
+                    if (count == 0)
+                        throw new NetSuiteException($"The attached files could not be read with saved search '{search}': the next page could not be read.", NetSuiteErrorKind.ServiceUnavailable);
+                }
+            }
+        }
+
+        //結果の行の列 (名前の大文字・小文字は区別しない)。無い・空なら null
+        static string? FindValue(JsonElement item, string column, bool preferName)
+        {
+            if (string.IsNullOrEmpty(column)) return null;
+            if (item.TryGetProperty(column, out var value)) return NetSuiteAttachments.ReadSearchValue(value, preferName);
+            foreach (var property in item.EnumerateObject())
+            {
+                if (string.Equals(property.Name, column, StringComparison.OrdinalIgnoreCase)) return NetSuiteAttachments.ReadSearchValue(property.Value, preferName);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// ファイルを File Cabinet に登録し (POST document/v1/file/ の multipart: attributes と data)、ファイルの internal ID を返す (204 の x-ns-link の末尾)。
+        /// 書き込みなので、結果が分からない失敗はやり直さない (WriteResultUnknown)。10 MB を超えて断られたら (413) 分かるエラーにする。
+        /// </summary>
+        internal async Task<string> UploadFileAsync(string folderId, string name, string contentType, byte[] content)
+        {
+            var attributes = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>
+            {
+                ["isLink"] = false,
+                ["fileName"] = name,
+                ["folder"] = new Dictionary<string, string> { ["id"] = folderId },
+            });
+            HttpResponseMessage response;
+            try
+            {
+                response = await SendAsync(() =>
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, $"{RestUrl}/document/v1/file/");
+                    var multipart = new MultipartFormDataContent();
+                    var attributesPart = new ByteArrayContent(attributes);
+                    attributesPart.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                    multipart.Add(attributesPart, "attributes");
+                    var dataPart = new ByteArrayContent(content);
+                    dataPart.Headers.ContentType = MediaTypeHeaderValue.TryParse(contentType, out var type) ? type : new MediaTypeHeaderValue(NetSuiteAttachments.DefaultContentType);
+                    //本当の名前は attributes の fileName。Content-Disposition に書けない文字 (" \ 制御文字) は置き換える (そのままだとヘッダーの組み立てで例外になる)
+                    multipart.Add(dataPart, "data", ToHeaderFileName(name));
+                    request.Content = multipart;
+                    return request;
+                }, false);
+            }
+            catch (NetSuiteException e) when (e.StatusCode == HttpStatusCode.RequestEntityTooLarge)
+            {
+                throw new NetSuiteException($"NetSuite did not accept '{name}' because it is too large (NetSuite accepts up to 10 MB per file).",
+                    NetSuiteErrorKind.InvalidRequest, HttpStatusCode.RequestEntityTooLarge, e.ErrorCode, e.ErrorPath);
+            }
+            using (response)
+            {
+                var link = response.Headers.TryGetValues("x-ns-link", out var values) ? values.FirstOrDefault() : null;
+                var id = (link ?? string.Empty).Trim().TrimEnd('/').Split('/').LastOrDefault();
+                if (!NetSuiteAttachments.IsFileId(id))
+                    throw new NetSuiteException($"NetSuite accepted the file '{name}' but did not return its id. Whether it was registered is unknown. Check the File Cabinet before retrying.",
+                        NetSuiteErrorKind.WriteResultUnknown);
+                return id!;
+            }
+        }
+
+        /// <summary>multipart の data のファイル名: " と \ と制御文字を _ にした名前。</summary>
+        internal static string ToHeaderFileName(string name)
+            => new(name.Select(c => c == '"' || c == '\\' || char.IsControl(c) ? '_' : c).ToArray());
+
+        /// <summary>登録済みのファイルをレコードに添付する (POST record/v1/{type}/{id}/!attach/file/{fileId}・本文なし)。</summary>
+        internal async Task AttachFileAsync(string recordType, string recordId, string fileId)
+        {
+            using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post,
+                $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(recordId)}/!attach/file/{Uri.EscapeDataString(fileId)}"), false);
+        }
+
+        /// <summary>ファイルをレコードから外す (POST record/v1/{type}/{id}/!detach/file/{fileId}・本文なし)。File Cabinet のファイルは残る。</summary>
+        internal async Task DetachFileAsync(string recordType, string recordId, string fileId)
+        {
+            using var response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post,
+                $"{RestUrl}/record/v1/{Uri.EscapeDataString(recordType)}/{Uri.EscapeDataString(recordId)}/!detach/file/{Uri.EscapeDataString(fileId)}"), false);
+        }
+
+        /// <summary>ファイルの中身を読む (GET document/v1/file/{id}/content)。読めなければ (403・404・10 MB 超の 413 など) NetSuiteException。</summary>
+        internal async Task<byte[]> DownloadFileAsync(string fileId)
+        {
+            using var response = await SendAsync(() =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{RestUrl}/document/v1/file/{Uri.EscapeDataString(fileId)}/content");
+                request.Headers.Accept.ParseAdd("application/octet-stream");
+                return request;
+            }, true);
+            return await response.Content.ReadAsByteArrayAsync();
         }
 
         static HttpRequestMessage CreateWriteRequest(HttpMethod method, string url, byte[] json)

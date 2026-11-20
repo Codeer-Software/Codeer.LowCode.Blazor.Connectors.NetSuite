@@ -82,6 +82,18 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
     {
+      "Text": "",
+      "RelativeField": "Files",
+      "Name": "FilesLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "files",
+      "DisplayName": "添付ファイル",
+      "Name": "Files",
+      "TypeFullName": "Codeer.LowCode.Blazor.Connectors.NetSuite.NetSuiteAttachmentsFieldDesign"
+    },
+    {
       "Text": "保存",
       "Name": "SubmitButton",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
@@ -208,6 +220,26 @@
             ]
           },
           {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "FilesLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                },
+                "Width": 96,
+                "VerticalAlignment": "Top"
+              },
+              {
+                "Layout": {
+                  "FieldName": "Files",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
             "Margin": {
               "Top": 12
             },
@@ -241,6 +273,10 @@
           },
           {
             "FieldName": "Memo"
+          },
+          {
+            "FieldName": "Files",
+            "CanUserSort": false
           }
         ]
       ]

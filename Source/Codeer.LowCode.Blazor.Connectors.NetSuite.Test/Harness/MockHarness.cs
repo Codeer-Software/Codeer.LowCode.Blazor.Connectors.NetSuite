@@ -16,6 +16,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
     /// <summary>
     /// モック (Mock プロジェクト) をプロセスの中で立て (実ポートは開かない)、本物のコネクターと本体の ModuleDataIO をつなぐ。
     /// データは mock-data.json (既定の架空のサンプル)。モジュール: Subsidiary / Customer / Sample (customrecord_sample)。データソース名は "NS"。
+    /// 表の定義は、始めるときにモックから一時フォルダに書いたメタ情報のファイル (書くための要求は <see cref="Recorder"/> に入れない)。
     /// </summary>
     public sealed class MockHarness : IAsyncDisposable
     {
@@ -30,12 +31,24 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
         public NetSuiteDbAccessor Accessor { get; private set; } = null!;
         public DesignData Design { get; private set; } = null!;
         public ModuleDataIO IO { get; private set; } = null!;
+        /// <summary>メタ情報のファイルを書いたプロジェクト (一時フォルダ)。</summary>
+        public TestProject Project { get; } = new();
 
         MockHarness() { }
 
-        class Auth : IAuthenticationContext
+        /// <summary>ModuleDataIO の現在の利用者の Id (既定 "U1")。</summary>
+        public string CurrentUserId { get; private set; } = "U1";
+
+        /// <summary>現在の利用者を変えて <see cref="IO"/> を作り直す (本体は利用者を ModuleDataIO ごとに持っておくので、1 要求 = 1 つの ModuleDataIO と同じにする)。</summary>
+        public void SetCurrentUser(string id)
         {
-            public Task<string> GetCurrentUserIdAsync() => Task.FromResult("U1");
+            CurrentUserId = id;
+            IO = new ModuleDataIO(Design, new Auth(this), Accessor, null!);
+        }
+
+        class Auth(MockHarness owner) : IAuthenticationContext
+        {
+            public Task<string> GetCurrentUserIdAsync() => Task.FromResult(owner.CurrentUserId);
         }
 
         public static string DataPath => Path.Combine(AppContext.BaseDirectory, "mock-data.json");
@@ -45,9 +58,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
 
         /// <param name="mock">既定は mock-data.json。</param>
         /// <param name="editDesign">モジュールを足す・変えるとき (ModuleDataIO を作る前に呼ぶ)。</param>
-        /// <param name="metadataDirectory">NetSuiteDbAccessor に渡すメタ情報のファイルのフォルダ。</param>
+        /// <param name="metadataFile">NetSuiteDbAccessor に渡すメタ情報のファイル。null ならモックから <see cref="Project"/> に書いたもの。</param>
         public static async Task<MockHarness> StartAsync(MockNetSuite? mock = null, Action<NetSuiteConnectionSettings>? edit = null,
-            Action<DesignData>? editDesign = null, string? metadataDirectory = null)
+            Action<DesignData>? editDesign = null, NetSuiteMetadataFile? metadataFile = null)
         {
             var h = new MockHarness { Mock = mock ?? MockNetSuite.FromFile(DataPath) };
 
@@ -66,15 +79,19 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
                 ClientId = "mock-client",
                 CertificateId = "mock-cert",
                 PrivateKey = TestConnections.RsaPrivateKeyPem,
-                Records = new() { "subsidiary", "customer", "customrecord_sample" },
             };
             edit?.Invoke(settings);
             h.Recorder = new RecordingHandler(h.Handler);
+            if (metadataFile == null)
+            {
+                await NetSuiteMetadataFile.UpdateAsync(new NetSuiteConnection(settings, h.Handler) { Delay = _ => Task.CompletedTask }, h.Project.Directory);
+                metadataFile = h.Project.MetadataFile;
+            }
             h.Connection = h.CreateConnection(settings);
-            h.Accessor = new NetSuiteDbAccessor(h.Inner, new[] { h.Connection }, metadataDirectory);
+            h.Accessor = new NetSuiteDbAccessor(h.Inner, new[] { h.Connection }, metadataFile);
             h.Design = CreateDesign();
             editDesign?.Invoke(h.Design);
-            h.IO = new ModuleDataIO(h.Design, new Auth(), h.Accessor, null!);
+            h.IO = new ModuleDataIO(h.Design, new Auth(h), h.Accessor, null!);
             return h;
         }
 
@@ -83,6 +100,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
             await _app.StopAsync();
             await _app.DisposeAsync();
             Mock.Dispose();
+            Project.Dispose();
         }
 
         /// <summary>このモックへの、新しい接続 (トークン・定義のキャッシュを持たない)。要求は <see cref="Recorder"/> に記録される。</summary>
@@ -176,10 +194,18 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
             lock (_lock) _requests.Clear();
         }
 
+        /// <summary>
+        /// 要求への応答を差し替える (失敗の再現)。引数は要求と「モックへ渡す」処理。null なら全部モックへ渡す。
+        /// 渡してから例外を投げれば「処理されたが応答を受け取れない」になる。
+        /// </summary>
+        public Func<HttpRequestMessage, Func<Task<HttpResponseMessage>>, Task<HttpResponseMessage>>? Intercept { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content == null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
             lock (_lock) _requests.Add((request.Method, request.RequestUri!.AbsolutePath, body, Uri.UnescapeDataString(request.RequestUri!.Query)));
+            var intercept = Intercept;
+            if (intercept != null) return await intercept(request, () => base.SendAsync(request, cancellationToken));
             return await base.SendAsync(request, cancellationToken);
         }
     }

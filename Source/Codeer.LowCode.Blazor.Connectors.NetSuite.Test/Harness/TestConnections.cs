@@ -21,7 +21,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
                 ClientId = "client-1",
                 CertificateId = "cert-1",
                 PrivateKey = RsaPrivateKeyPem,
-                Records = new() { "customer", "subsidiary" },
             };
             edit?.Invoke(settings);
             return settings;

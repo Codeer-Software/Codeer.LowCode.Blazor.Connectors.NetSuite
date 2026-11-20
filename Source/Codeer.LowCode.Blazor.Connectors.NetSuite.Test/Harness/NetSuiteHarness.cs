@@ -10,6 +10,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
     /// <summary>
     /// 本体の ModuleDataIO を NetSuiteDbAccessor (中身は FakeNetSuite) で動かす。
     /// モジュール: Subsidiary / Customer / CustomerLocked (lastmodifieddate で楽観ロック)。データソース名は "NS"。
+    /// 表の定義は、作るときの偽物の定義 (Fake.Schemas) から一時フォルダに書いたメタ情報のファイル。
     /// </summary>
     public sealed class NetSuiteHarness : IDisposable
     {
@@ -20,6 +21,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
         public NetSuiteDbAccessor Accessor { get; }
         public DesignData Design { get; }
         public ModuleDataIO IO { get; }
+        public TestProject Project { get; } = new();
 
         class Auth : IAuthenticationContext
         {
@@ -27,16 +29,23 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test.Harness
         }
 
         /// <param name="editDesign">モジュールを足す・変えるとき (ModuleDataIO を作る前に呼ぶ)。</param>
-        public NetSuiteHarness(Action<NetSuiteConnectionSettings>? edit = null, Action<DesignData>? editDesign = null)
+        /// <param name="editFake">偽物の定義を足す・変えるとき (メタ情報のファイルを書く前に呼ぶ)。</param>
+        public NetSuiteHarness(Action<NetSuiteConnectionSettings>? edit = null, Action<DesignData>? editDesign = null, Action<FakeNetSuite>? editFake = null)
         {
+            editFake?.Invoke(Fake);
+            Project.WriteAsync(Fake.Schemas).GetAwaiter().GetResult();
             Connection = TestConnections.Create(Fake, Delays, edit);
-            Accessor = new NetSuiteDbAccessor(Inner, new[] { Connection });
+            Accessor = new NetSuiteDbAccessor(Inner, new[] { Connection }, Project.MetadataFile);
             Design = CreateDesign();
             editDesign?.Invoke(Design);
             IO = new ModuleDataIO(Design, new Auth(), Accessor, null!);
         }
 
-        public void Dispose() => Fake.Dispose();
+        public void Dispose()
+        {
+            Fake.Dispose();
+            Project.Dispose();
+        }
 
         static DesignData CreateDesign()
         {

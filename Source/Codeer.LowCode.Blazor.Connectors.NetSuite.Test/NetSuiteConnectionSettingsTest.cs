@@ -24,7 +24,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             var settings = NetSuiteConnectionSettings.FromDataSource(Source(
                 "provider=netsuite;ServiceUrl=https://1234567.suitetalk.api.netsuite.com/;ClientId=cid;CertificateId=kid;PrivateKeyPath=C:\\keys\\ns.pem;" +
                 "PrivateKey=\"-----BEGIN PRIVATE KEY-----\\nAB+/=\\n-----END PRIVATE KEY-----\";Algorithm=ES256;Scope=rest_webservices,restlets;" +
-                "Records= customer , customrecord_x ,,salesorder;TimeoutSeconds=30;MaxConcurrency=2;MaxRows=500"))!;
+                "TimeoutSeconds=30;MaxConcurrency=2;MaxRows=500"))!;
             Assert.That(settings, Is.Not.Null);
             Assert.That(settings.Name, Is.EqualTo("NS"));
             Assert.That(settings.ServiceUrl, Is.EqualTo("https://1234567.suitetalk.api.netsuite.com"));
@@ -34,7 +34,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(settings.PrivateKey, Is.EqualTo("-----BEGIN PRIVATE KEY-----\\nAB+/=\\n-----END PRIVATE KEY-----"));
             Assert.That(settings.Algorithm, Is.EqualTo("ES256"));
             Assert.That(settings.Scope, Is.EqualTo("rest_webservices,restlets"));
-            Assert.That(settings.Records, Is.EqualTo(new[] { "customer", "customrecord_x", "salesorder" }));
             Assert.That(settings.TimeoutSeconds, Is.EqualTo(30));
             Assert.That(settings.MaxConcurrency, Is.EqualTo(2));
             Assert.That(settings.MaxRows, Is.EqualTo(500));
@@ -49,7 +48,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
             Assert.That(settings.TimeoutSeconds, Is.EqualTo(100));
             Assert.That(settings.MaxConcurrency, Is.EqualTo(4));
             Assert.That(settings.MaxRows, Is.EqualTo(10000));
-            Assert.That(settings.Records, Is.Empty);
             Assert.That(settings.ClientId, Is.Empty);
             Assert.That(settings.PrivateKey, Is.Empty);
         }
@@ -103,17 +101,39 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         }
 
         [Test]
-        public void Validate_Recordsが空()
+        public void 添付のキーを読み親の列の既定はinternalid()
         {
-            var settings = TestConnections.CreateSettings(e => e.Records = new());
-            var ex = Assert.Throws<NetSuiteException>(() => settings.Validate());
-            Assert.That(ex!.Message, Does.Contain("Records"));
+            var settings = NetSuiteConnectionSettings.FromDataSource(Source("Provider=NetSuite;ServiceUrl=https://x.suitetalk.api.netsuite.com;" +
+                "AttachmentFolderId= 100 ;AttachmentSavedSearchId=customsearch_files;AttachmentSearchFileColumn=file_internalid;AttachmentSearchFileNameColumn=file_name;" +
+                "AttachmentSearchFileSizeColumn=file_documentsize;AttachmentSearchFileTypeColumn=file_filetype"))!;
+            Assert.That((settings.AttachmentFolderId, settings.AttachmentSavedSearchId, settings.AttachmentSearchRecordColumn, settings.AttachmentSearchFileColumn,
+                settings.AttachmentSearchFileNameColumn, settings.AttachmentSearchFileSizeColumn, settings.AttachmentSearchFileTypeColumn),
+                Is.EqualTo(("100", "customsearch_files", "internalid", "file_internalid", "file_name", "file_documentsize", "file_filetype")));
+            var other = NetSuiteConnectionSettings.FromDataSource(Source("Provider=NetSuite;ServiceUrl=https://x.suitetalk.api.netsuite.com;AttachmentSearchRecordColumn=tranid"))!;
+            Assert.That((other.AttachmentSearchRecordColumn, other.AttachmentFolderId, other.AttachmentSavedSearchId), Is.EqualTo(("tranid", "", "")));
+        }
+
+        [Test]
+        public void Validate_添付の設定()
+        {
+            //どちらも無くてよい・フォルダだけ (足すだけ) でもよい
+            Assert.DoesNotThrow(() => TestConnections.CreateSettings(e => e.AttachmentFolderId = "100").Validate());
+            Assert.DoesNotThrow(() => TestConnections.CreateSettings(e => { e.AttachmentSavedSearchId = "123"; e.AttachmentSearchFileColumn = "f"; e.AttachmentSearchFileNameColumn = "n"; }).Validate());
+
+            var folder = Assert.Throws<NetSuiteException>(() => TestConnections.CreateSettings(e => e.AttachmentFolderId = "../100").Validate());
+            Assert.That(folder!.Message, Does.Contain("AttachmentFolderId"));
+            var search = Assert.Throws<NetSuiteException>(() => TestConnections.CreateSettings(e => { e.AttachmentSavedSearchId = "a/b"; e.AttachmentSearchFileColumn = "f"; e.AttachmentSearchFileNameColumn = "n"; }).Validate());
+            Assert.That(search!.Message, Does.Contain("AttachmentSavedSearchId"));
+            var file = Assert.Throws<NetSuiteException>(() => TestConnections.CreateSettings(e => { e.AttachmentSavedSearchId = "123"; e.AttachmentSearchFileNameColumn = "n"; }).Validate());
+            Assert.That(file!.Message, Does.Contain("AttachmentSearchFileColumn"));
+            var name = Assert.Throws<NetSuiteException>(() => TestConnections.CreateSettings(e => { e.AttachmentSavedSearchId = "123"; e.AttachmentSearchFileColumn = "f"; }).Validate());
+            Assert.That(name!.Message, Does.Contain("AttachmentSearchFileNameColumn"));
         }
 
         [Test]
         public void 接続のコンストラクタも検証する()
         {
-            Assert.Throws<NetSuiteException>(() => new NetSuiteConnection(TestConnections.CreateSettings(e => e.Records = new()), new FakeNetSuite()));
+            Assert.Throws<NetSuiteException>(() => new NetSuiteConnection(TestConnections.CreateSettings(e => e.ClientId = ""), new FakeNetSuite()));
         }
     }
 }

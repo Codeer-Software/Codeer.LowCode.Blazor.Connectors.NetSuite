@@ -27,8 +27,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         [TearDown]
         public async Task TearDown() => await _h.DisposeAsync();
 
-        static Task<MockHarness> StartAsync(global::NetSuite.Mock.MockNetSuite? mock = null, string? metadataDirectory = null)
-            => MockHarness.StartAsync(mock, e => e.Records.AddRange(new[] { "item", "salesorder" }), AddModules, metadataDirectory);
+        static Task<MockHarness> StartAsync(global::NetSuite.Mock.MockNetSuite? mock = null, NetSuiteMetadataFile? metadataFile = null)
+            => MockHarness.StartAsync(mock, null, AddModules, metadataFile);
 
         static void AddModules(DesignData d)
         {
@@ -132,13 +132,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
 
         [TestCase("salesorder_none", TestName = "明細の列でない名前")]
         [TestCase("item_item", TestName = "取引でないレコード")]
-        [TestCase("customer_item", TestName = "Recordsに無いレコード")]
-        public void 明細の表にならない名前はRecordsに無いレコードと同じ例外(string name)
+        [TestCase("customer_item", TestName = "明細の無いレコード")]
+        public void 明細の表にならない名前はメタ情報に無いレコードと同じ例外(string name)
         {
             var ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, name));
-            Assert.That(ex!.Message, Does.Contain($"'{name}' is not listed in Records"));
+            Assert.That(ex!.Message, Does.Contain($"'{name}' is not in the NetSuite metadata"));
             ex = Assert.ThrowsAsync<NetSuiteException>(() => _h.Accessor.QueryAsync(TestConnections.DataSourceName, $"select \"{name}\".\"item\" as \"a\" from \"{name}\"", new()));
-            Assert.That(ex!.Message, Does.Contain("not listed in Records"));
+            Assert.That(ex!.Message, Does.Contain("is not in the NetSuite metadata"));
         }
 
         [Test]
@@ -149,7 +149,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
                 { "fields": { "name": "string" }, "sublists": { "entry": { "fields": { "memo": "string" } } },
                   "rows": [ { "id": 1, "name": "A", "entry": { "items": [ { "memo": "x" } ] } } ] }
                 """);
-            await using var h = await MockHarness.StartAsync(global::NetSuite.Mock.MockNetSuite.FromJson(data.ToJsonString()), e => e.Records.Add("customrecord_lines"));
+            await using var h = await MockHarness.StartAsync(global::NetSuite.Mock.MockNetSuite.FromJson(data.ToJsonString()));
 
             var tables = (await h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName))!;
             //明細そのものは親の列として読める
@@ -336,48 +336,16 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         // ---------------------------------------------------------------- メタ情報のファイル
 
         [Test]
-        public async Task メタ情報のファイルに明細の表が親と明細の名前つきで入り_ファイルからでも同じ定義で読める()
+        public void メタ情報のファイルに明細の表が親と明細の名前つきで入る()
         {
-            var directory = Path.Combine(Path.GetTempPath(), "netsuite-line-table-test-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(directory);
-            try
-            {
-                await NetSuiteMetadataFile.UpdateAsync(_h.Connection, directory);
-                var file = JsonNode.Parse(File.ReadAllText(NetSuiteMetadataFile.GetPath(directory, TestConnections.DataSourceName)))!;
-                var record = file["Records"]!.AsArray().Single(e => e!["Name"]!.GetValue<string>() == "salesorder_item")!;
-                Assert.That(record["Parent"]!.GetValue<string>(), Is.EqualTo("salesorder"));
-                Assert.That(record["Sublist"]!.GetValue<string>(), Is.EqualTo("item"));
-                Assert.That(file["Records"]!.AsArray().Where(e => e!["Name"]!.GetValue<string>() == "customer").Single()!.AsObject().ContainsKey("Parent"), Is.False);
-
-                var expected = await _h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, "salesorder_item");
-                await using var fromFile = await StartAsync(null, directory);
-                var saved = await fromFile.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName, "salesorder_item");
-                Assert.That(System.Text.Json.JsonSerializer.Serialize(saved), Is.EqualTo(System.Text.Json.JsonSerializer.Serialize(expected)));
-                Assert.That((await fromFile.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName))!.Select(e => e.Name), Does.Contain("salesorder_item"));
-                Assert.That(fromFile.Recorder.Requests, Is.Empty);
-            }
-            finally
-            {
-                Directory.Delete(directory, true);
-            }
-        }
-
-        [Test]
-        public async Task 親をRecordsから外すとファイルにあっても明細の表は返さない()
-        {
-            var directory = Path.Combine(Path.GetTempPath(), "netsuite-line-table-test-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(directory);
-            try
-            {
-                await NetSuiteMetadataFile.UpdateAsync(_h.Connection, directory);
-                await using var h = await MockHarness.StartAsync(null, e => e.Records.Add("item"), null, directory);
-                var names = (await h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName))!.Select(e => e.Name).ToList();
-                Assert.That(names, Has.None.StartsWith("salesorder"));
-            }
-            finally
-            {
-                Directory.Delete(directory, true);
-            }
+            var file = JsonNode.Parse(File.ReadAllText(_h.Project.MetadataPath()))!;
+            var record = file["Records"]!.AsArray().Single(e => e!["Name"]!.GetValue<string>() == "salesorder_item")!;
+            Assert.That(record["Parent"]!.GetValue<string>(), Is.EqualTo("salesorder"));
+            Assert.That(record["Sublist"]!.GetValue<string>(), Is.EqualTo("item"));
+            Assert.That(file["Records"]!.AsArray().Where(e => e!["Name"]!.GetValue<string>() == "customer").Single()!.AsObject().ContainsKey("Parent"), Is.False);
+            //明細の表は親の後ろ
+            var names = file["Records"]!.AsArray().Select(e => e!["Name"]!.GetValue<string>()).ToList();
+            Assert.That(names.IndexOf("salesorder_item"), Is.EqualTo(names.IndexOf("salesorder") + 1));
         }
 
         // ---------------------------------------------------------------- モック単体

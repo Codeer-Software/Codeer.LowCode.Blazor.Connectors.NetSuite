@@ -13,13 +13,24 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         const string LineKey = "line";
         const string RefNameSuffix = "_refName";
 
+        /// <summary>行の JSON に入れる、読んだときにあった行の line の並び ("1,2,3")。NetSuite へは送らない。</summary>
+        internal const string ReadLinesKey = "_readLines";
+
         // ---------------------------------------------------------------- 読み出し
 
         /// <summary>レコード (GET ?expandSubResources=true の応答) の明細を、列の値にする。</summary>
         internal static string ToColumnValue(JsonElement record, NetSuiteFieldDefinition sublist)
         {
+            var restRows = GetRestRows(record, sublist);
+            //読んだときにあった行 (line) を、どの行にも持たせる。保存で「画面で消した行」と「読んだ後にほかで足された行」を分けるのに使う
+            var readLines = string.Join(",", restRows.Select(e => e.TryGetProperty(LineKey, out var line) ? ToLineKey(line) : null).OfType<string>());
             var array = new JsonArray();
-            foreach (var row in GetRestRows(record, sublist)) array.Add(ToColumnRow(row, sublist));
+            foreach (var row in restRows)
+            {
+                var columnRow = ToColumnRow(row, sublist);
+                columnRow[ReadLinesKey] = readLines;
+                array.Add(columnRow);
+            }
             return array.ToJsonString();
         }
 
@@ -95,7 +106,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             var result = new JsonObject();
             foreach (var field in sublist.SublistFields)
             {
-                if (field.RestName == LineKey) continue;
+                //読み取り専用の項目は送らない (NetSuite が決める。行のコピーで写った値も送らない)
+                if (field.RestName == LineKey || field.IsReadOnly) continue;
                 var value = ToRestValue(sublist, field, row[field.RestName]);
                 if (value != null) result[field.RestName] = value;
             }
@@ -104,14 +116,27 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         /// <summary>
         /// 更新の明細。今の明細 (current) と line で突き合わせ、変わった行は line + 変わった項目、line の無い行は新しい行にする。
-        /// 消えた行があれば replace (残す行を全部並べ、変わっていない行は line だけ)。差が無ければ Items は null。
+        /// 消すのは「読んだときにあって (行の <see cref="ReadLinesKey"/>)、要求に無い行」だけ。読んだ後にほかで足された行は残す。
+        /// 消す行があれば replace (残す行を全部並べ、変わっていない行・ほかで足された行は line だけ)。差が無ければ Items は null。
+        /// 要求のどの行も読んだときの行を持たない (読んだ明細が空・行を全部消した・画面以外で作った値) ときは、要求の行が明細の全部 (無い行は消す)。
+        /// 要求の line が今の明細に無い (読んだ後にほかで消された) ときは <see cref="NetSuiteErrorKind.Conflict"/>、同じ line が 2 つあれば入力のエラー。
+        /// 今ある行の読み取り専用の項目は比べずに送らない (明細は行ごと全部の値が来るので、利用者が触ったのか、ほかの人・NetSuite の再計算で変わったのかを見分けられない)。
         /// </summary>
-        internal static (JsonObject? Items, bool Replace) CreateUpdateItems(NetSuiteFieldDefinition sublist, List<JsonObject> rows, JsonElement current)
+        internal static (JsonObject? Items, bool Replace) CreateUpdateItems(string table, NetSuiteFieldDefinition sublist, List<JsonObject> rows, JsonElement current)
         {
             var currentRows = new Dictionary<string, JsonElement>();
+            var currentOrder = new List<string>();
             foreach (var row in GetRestRows(current, sublist))
             {
-                if (row.TryGetProperty(LineKey, out var line) && ToLineKey(line) is { } key) currentRows.TryAdd(key, row);
+                if (row.TryGetProperty(LineKey, out var line) && ToLineKey(line) is { } key && currentRows.TryAdd(key, row)) currentOrder.Add(key);
+            }
+
+            HashSet<string>? readLines = null;
+            foreach (var row in rows)
+            {
+                if (row[ReadLinesKey] is not JsonValue value || value.GetValueKind() != JsonValueKind.String) continue;
+                readLines ??= new();
+                foreach (var text in value.GetValue<string>().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) readLines.Add(text);
             }
 
             var kept = new HashSet<string>();
@@ -119,27 +144,45 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             foreach (var row in rows)
             {
                 var key = ToLineKey(row[LineKey]);
-                if (key != null && currentRows.TryGetValue(key, out var currentRow) && kept.Add(key))
+                if (key == null)
                 {
-                    var element = new JsonObject { [LineKey] = long.Parse(key, CultureInfo.InvariantCulture) };
-                    foreach (var field in sublist.SublistFields)
-                    {
-                        if (field.RestName == LineKey) continue;
-                        var value = row[field.RestName];
-                        currentRow.TryGetProperty(field.RestName, out var currentValue);
-                        if (IsSame(field, value, currentValue)) continue;
-                        //null にした項目は null を送る
-                        element[field.RestName] = ToRestValue(sublist, field, value);
-                    }
-                    elements.Add((element, 1 < element.Count));
+                    //line の無い行は新しい行
+                    elements.Add((CreateNewRow(sublist, row), true));
                     continue;
                 }
-                //line の無い行・今の明細に無い line (ほかで消された行)・同じ line の 2 つ目は新しい行 (同時編集は後勝ち)
-                elements.Add((CreateNewRow(sublist, row), true));
+                if (!kept.Add(key))
+                    throw new NetSuiteException($"Line {key} of sublist '{sublist.RestName}' of NetSuite record type '{table}' appears more than once.", NetSuiteErrorKind.InvalidRequest);
+                if (!currentRows.TryGetValue(key, out var currentRow))
+                    throw new NetSuiteException($"Line {key} of sublist '{sublist.RestName}' of NetSuite record type '{table}' was deleted in NetSuite after it was read. Reload the record and try again.",
+                        NetSuiteErrorKind.Conflict);
+                var element = new JsonObject { [LineKey] = long.Parse(key, CultureInfo.InvariantCulture) };
+                foreach (var field in sublist.SublistFields)
+                {
+                    //読み取り専用の項目は送らない (読んだ後の再計算などで変わっていても、触っていない保存をエラーにしない)
+                    if (field.RestName == LineKey || field.IsReadOnly) continue;
+                    var value = row[field.RestName];
+                    currentRow.TryGetProperty(field.RestName, out var currentValue);
+                    if (IsSame(field, value, currentValue)) continue;
+                    //null にした項目は null を送る
+                    element[field.RestName] = ToRestValue(sublist, field, value);
+                }
+                elements.Add((element, 1 < element.Count));
             }
 
-            var replace = currentRows.Keys.Any(e => !kept.Contains(e));
-            var items = replace ? elements.Select(e => e.Element).ToList() : elements.Where(e => e.IsChanged).Select(e => e.Element).ToList();
+            //消す行: 要求に無い今の行のうち、読んだときにあったもの (読んだときの行が分からなければ全部)
+            var deleted = currentOrder.Where(e => !kept.Contains(e) && (readLines == null || readLines.Contains(e))).ToList();
+            var replace = deleted.Count != 0;
+            List<JsonObject> items;
+            if (replace)
+            {
+                //残す行を全部並べる: 要求の行 (要求の順) と、読んだ後にほかで足された行 (line だけ = 変えない)
+                items = elements.Select(e => e.Element).ToList();
+                items.AddRange(currentOrder.Where(e => !kept.Contains(e) && !deleted.Contains(e)).Select(e => new JsonObject { [LineKey] = long.Parse(e, CultureInfo.InvariantCulture) }));
+            }
+            else
+            {
+                items = elements.Where(e => e.IsChanged).Select(e => e.Element).ToList();
+            }
             if (items.Count == 0 && !replace) return (null, false);
             return (new JsonObject { ["items"] = new JsonArray(items.Select(e => (JsonNode?)e).ToArray()) }, replace);
         }

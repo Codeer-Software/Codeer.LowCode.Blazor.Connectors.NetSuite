@@ -40,7 +40,7 @@ namespace LowCodeApp.Server.Infrastructure
                     options.Events.OnValidatePrincipal = async context =>
                     {
                         var dataService = context.HttpContext.RequestServices.GetRequiredService<DataService>();
-                        await LoginSessionValidation.ValidatePrincipalAsync(context, LoginAccountStore.Create(dataService.Design.DesignData, dataService.DbAccess));
+                        await LoginSessionValidation.ValidatePrincipalAsync(context, LoginAccountStore.Create(dataService.Design.DesignData, dataService.ModuleDbAccess));
                     };
                 })
                 //外部 IdP (Entra ID / Google / AWS Cognito / OIDC)。並べるプロバイダは Extras/ExternalLoginTable が組み立てる

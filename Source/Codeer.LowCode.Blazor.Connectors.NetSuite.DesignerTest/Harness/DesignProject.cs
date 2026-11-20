@@ -14,10 +14,11 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest.Harness
         public string Root { get; }
         public string Directory { get; }
         public string ProjectFile => Path.Combine(Directory, "app.clprj");
-        public string MetadataFile => Path.Combine(Directory, $"netsuite.{DataSourceName}.metadata.json");
+        //メタ情報のファイルはプロジェクトのサーバー専用ファイル
+        public string MetadataFile => Path.Combine(Directory, "ServerFiles", $"netsuite.{DataSourceName}.metadata.json");
         public string FolderName => Path.GetFileName(Directory);
 
-        public DesignProject(string serviceUrl, string records)
+        public DesignProject(string serviceUrl)
         {
             Root = Path.Combine(Path.GetTempPath(), "NetSuiteDesignerTest", Guid.NewGuid().ToString("N"));
             Directory = Path.Combine(Root, "App");
@@ -43,7 +44,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest.Harness
             {
                 ["ConnectionStrings"] = new JsonObject
                 {
-                    [DataSourceName] = $"Provider=NetSuite;ServiceUrl={serviceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={keyPath};Records={records}",
+                    [DataSourceName] = $"Provider=NetSuite;ServiceUrl={serviceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={keyPath}",
                 },
             });
         }

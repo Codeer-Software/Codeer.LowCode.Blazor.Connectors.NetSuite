@@ -16,14 +16,16 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Designer
         static bool IsJapanese => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ja";
 
         /// <summary>
-        /// NetSuite のモジュールを設計するための AI 用の仕様ドキュメントを登録する (ai-refresh が _specs/NetSuite.md に書き出す)。
+        /// NetSuite のモジュールを設計するための AI 用の仕様ドキュメントを登録し、添付のフィールド (画面用パッケージ) を使えるようにする (ai-refresh が _specs/NetSuite.md に書き出す)。
         /// デザイナのアプリの OnStartup で、base.OnStartup(e) より前に呼ぶ。
-        /// これを呼ぶと、<see cref="CreateDbAccessor"/> の IDbAccessor は NetSuite の表の定義を、プロジェクトのフォルダに保存したファイルから読む
+        /// これを呼ぶと、<see cref="CreateDbAccessor"/> の IDbAccessor は NetSuite の表の定義を、プロジェクトのメタ情報のファイルから読む
         /// (NetSuite に取りに行くのは Tools のメニューで更新したときだけ。headless の CLI でも同じ)。
         /// </summary>
         public static void Initialize(DesignerEnvironment designerEnvironment)
         {
             _environment = designerEnvironment;
+            //添付のフィールドをツールボックスに出す (デザインを読む前にアセンブリを読み込む)
+            NetSuiteFieldsInitializer.Initialize();
             var assembly = typeof(NetSuiteDesignerInitializer).Assembly;
             foreach (var name in assembly.GetManifestResourceNames()
                          .Where(e => e.StartsWith(Prefix, StringComparison.Ordinal) && e.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
@@ -45,9 +47,14 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Designer
 
         /// <summary>
         /// デザイナ用の IDbAccessor (IDbAccessorFactory の実装で使う)。NetSuite 以外のデータソースは inner が受け持つ。
+        /// NetSuite の表の定義はプロジェクトのメタ情報のファイル (サーバー専用ファイル) から読む。プロジェクトを開いていなければ inner をそのまま返す。
         /// </summary>
         public static IDbAccessor CreateDbAccessor(IDbAccessor inner, IEnumerable<DataSource> dataSources)
-            => new NetSuiteDbAccessor(inner, NetSuiteConnection.FromDataSources(dataSources), GetProjectDirectory());
+        {
+            var directory = GetProjectDirectory();
+            if (string.IsNullOrEmpty(directory)) return inner;
+            return new NetSuiteDbAccessor(inner, NetSuiteConnection.FromDataSources(dataSources), NetSuiteMetadataFile.FromProject(directory));
+        }
 
         static string? GetProjectDirectory()
         {

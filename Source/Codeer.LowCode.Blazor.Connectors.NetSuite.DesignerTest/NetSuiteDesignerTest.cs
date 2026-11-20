@@ -27,7 +27,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest
         public async Task SetUp()
         {
             _mock = await MockServer.StartAsync();
-            _project = new DesignProject(_mock.ServiceUrl, MockServer.DefaultRecords);
+            _project = new DesignProject(_mock.ServiceUrl);
         }
 
         [TearDown]
@@ -97,16 +97,16 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest
             using (var file = JsonDocument.Parse(File.ReadAllText(_project.MetadataFile)))
             {
                 var records = file.RootElement.GetProperty("Records").EnumerateArray().Select(e => e.GetProperty("Name").GetString()).ToList();
-                Assert.That(records, Is.EquivalentTo(new[] { "subsidiary", "customer", "customrecord_sample" }));
+                Assert.That(records, Is.EquivalentTo(MockServer.DefaultTables));
             }
 
             var tables = designer.GetTables(DataSource);
-            Assert.That(tables.Select(e => e.Name), Is.EquivalentTo(new[] { "subsidiary", "customer", "customrecord_sample" }));
+            Assert.That(tables.Select(e => e.Name), Is.EquivalentTo(MockServer.DefaultTables));
 
             var customer = Table(tables, "customer");
             Assert.That(customer.Columns.Select(e => e.Name), Is.EquivalentTo(new[]
             {
-                "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary",
+                "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary", "emailpreference", "datecreated",
             }));
             Assert.That(Column(customer, "id").NetTypeFullName, Is.EqualTo(typeof(string).FullName));
             Assert.That(Column(customer, "companyname").NetTypeFullName, Is.EqualTo(typeof(string).FullName));
@@ -146,7 +146,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest
                 var fields = Fields(root);
                 Assert.That(fields.Keys, Is.EquivalentTo(new[]
                 {
-                    "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary",
+                    "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary", "emailpreference", "datecreated",
                 }));
                 Assert.That(fields["id"].Type, Is.EqualTo("IdFieldDesign"));
                 Assert.That(fields["companyname"].Type, Is.EqualTo("TextFieldDesign"));
@@ -193,7 +193,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest
             designer = Launch();
             Thread.Sleep(2000);
             var tables = designer.GetTables(DataSource);
-            Assert.That(tables.Select(e => e.Name), Is.EquivalentTo(new[] { "subsidiary", "customer", "customrecord_sample" }));
+            Assert.That(tables.Select(e => e.Name), Is.EquivalentTo(MockServer.DefaultTables));
             Assert.That(Table(tables, "customer").Columns.Select(e => e.Name), Does.Contain("lastmodifieddate"));
 
             designer.OpenModule("Customer");
@@ -220,7 +220,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.DesignerTest
 
             Assert.That(designer.HasExited, Is.False);
             Assert.That(File.ReadAllText(_project.MetadataFile), Is.EqualTo(before));
-            Assert.That(designer.GetTables(DataSource).Select(e => e.Name), Is.EquivalentTo(new[] { "subsidiary", "customer", "customrecord_sample" }));
+            Assert.That(designer.GetTables(DataSource).Select(e => e.Name), Is.EquivalentTo(MockServer.DefaultTables));
             Assert.That(designer.GetOtherVisibleWindows(), Is.Empty);
         }
 

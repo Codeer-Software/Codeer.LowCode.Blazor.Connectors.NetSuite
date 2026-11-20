@@ -15,6 +15,11 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         Reference,
         /// <summary>明細 (行キー line を持つサブリスト)。列の値は行の JSON 配列の文字列 (本体の列モードの一覧)。</summary>
         Sublist,
+        /// <summary>
+        /// レコードに添付したファイル (仮想の列。NetSuite の項目ではない)。値はファイルの JSON 配列の文字列。
+        /// 読むときは接続の保存検索で引き当て、書くときは File Cabinet への登録と !attach / !detach にする。メタ情報のファイルには書かない。
+        /// </summary>
+        Attachments,
     }
 
     class NetSuiteFieldDefinition
@@ -27,6 +32,16 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
 
         public NetSuiteFieldKind Kind { get; init; }
         public bool IsNullable { get; init; } = true;
+
+        /// <summary>
+        /// 読み取り専用 (メタデータの readOnly: true)。作成では値を送らず、更新の対象に入っていたら送る前にエラーにする。
+        /// </summary>
+        public bool IsReadOnly { get; init; }
+
+        /// <summary>
+        /// 固定の選択肢の値 (メタデータの enum。選択の項目なら id の enum)。NetSuite の内部の値で、表示名はメタデータに無い。固定の選択肢でなければ null。
+        /// </summary>
+        public List<string>? Choices { get; init; }
 
         /// <summary>明細 (<see cref="NetSuiteFieldKind.Sublist"/>) の行の項目。line を含む。</summary>
         public List<NetSuiteFieldDefinition> SublistFields { get; init; } = new();
@@ -60,14 +75,29 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         public NetSuiteFieldDefinition? FindByColumn(string column)
             => Fields.FirstOrDefault(e => string.Equals(e.Column, column, StringComparison.OrdinalIgnoreCase));
 
+        /// <summary>添付ファイルの仮想の列の名前。</summary>
+        internal const string AttachmentsColumn = "files";
+
         /// <summary>
-        /// 明細の表の定義 (取引のレコードの、明細の列ごとに 1 つ)。取引でなければ空。
+        /// 添付ファイルの仮想の列 (<see cref="NetSuiteFieldKind.Attachments"/>) を足す。取引の対応表にある取引のレコードだけ
+        /// (接続の保存検索 1 つで引き当てるので、internal ID が取引の全種類で重ならない取引に限る)。同じ名前の項目があれば足さない。
+        /// </summary>
+        internal void AddAttachmentsField()
+        {
+            if (IsLineTable || SuiteQlTranslator.GetTransactionType(Name) == null || FindByColumn(AttachmentsColumn) != null) return;
+            Fields.Add(new NetSuiteFieldDefinition { RestName = AttachmentsColumn, Column = AttachmentsColumn, Kind = NetSuiteFieldKind.Attachments });
+        }
+
+        /// <summary>
+        /// 明細の表の定義。取引の、SuiteQL の transactionline の行がそのまま行になる明細 (<see cref="SuiteQlTranslator.GetLineSublist"/>) だけ。それ以外は空。
         /// 表名は &lt;レコード名&gt;_&lt;明細の列名&gt; (小文字)。列は uniquekey・transaction (親への参照)・linesequencenumber と、行の項目 (line を除く)。
         /// </summary>
         internal List<NetSuiteRecordDefinition> CreateLineTables()
         {
-            if (IsLineTable || SuiteQlTranslator.GetTransactionType(Name) == null) return new();
-            return Fields.Where(e => e.Kind == NetSuiteFieldKind.Sublist).Select(CreateLineTable).ToList();
+            if (IsLineTable || SuiteQlTranslator.GetLineSublist(Name) is not { } lineSublist) return new();
+            //transactionline は取引の明細を区別せずに持つので、ほかの明細の表は作らない (作ると同じ行を別の表として見せてしまう)
+            return Fields.Where(e => e.Kind == NetSuiteFieldKind.Sublist && string.Equals(e.RestName, lineSublist, StringComparison.OrdinalIgnoreCase))
+                .Select(CreateLineTable).ToList();
         }
 
         NetSuiteRecordDefinition CreateLineTable(NetSuiteFieldDefinition sublist)
@@ -81,10 +111,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 //行キー line は REST の明細の番号なので列にしない。名前が重なる項目は先の列を残す
                 //SuiteQL の名前に使えない項目は列にしない
                 if (field.RestName == "line" || !SuiteQlTranslator.IsIdentifier(field.Column) || table.FindByColumn(field.Column) != null) continue;
-                table.Fields.Add(new NetSuiteFieldDefinition { RestName = field.RestName, Column = field.Column, Kind = field.Kind, IsNullable = field.IsNullable });
+                table.Fields.Add(new NetSuiteFieldDefinition { RestName = field.RestName, Column = field.Column, Kind = field.Kind, IsNullable = field.IsNullable, Choices = field.Choices });
             }
             return table;
         }
+
+        /// <summary>添付ファイルの仮想の列の型名 (デザイナのテーブルの定義に出る)。</summary>
+        internal const string AttachmentsRawTypeName = "netsuite_files";
 
         public DbTableDefinition ToTableDefinition()
         {
@@ -102,6 +135,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     NetSuiteFieldKind.Reference => (typeof(string), "REFERENCE"),
                     //明細は行の JSON 配列の文字列 (列モードの一覧で読み書きする)
                     NetSuiteFieldKind.Sublist => (typeof(string), "CLOB"),
+                    //添付はファイルの JSON 配列の文字列 (添付ファイルのフィールドで読み書きする)
+                    NetSuiteFieldKind.Attachments => (typeof(string), AttachmentsRawTypeName),
                     _ => (typeof(string), "VARCHAR2"),
                 };
                 table.Columns.Add(new DbColumnDefinition
@@ -144,12 +179,23 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 if (!SuiteQlTranslator.IsIdentifier(column) || columns.Contains(column)) continue;
 
                 var kind = GetKind(property.Value);
+                var choices = kind == null ? null : GetChoices(property.Value);
                 List<NetSuiteFieldDefinition>? sublistFields = null;
-                if (kind == null && column != "id")
+                if (kind == null && column != "id" && await ResolveAsync(property.Value, getSchema) is { ValueKind: JsonValueKind.Object } resolved)
                 {
-                    //明細 (行キー line を持つサブリスト) だけを列にする。読めない・行キーの無いものは今までどおり列にしない
-                    sublistFields = await GetSublistFieldsAsync(property.Value, getSchema);
-                    if (sublistFields != null) kind = NetSuiteFieldKind.Sublist;
+                    //明細 (行キー line を持つサブリスト) を列にする
+                    sublistFields = await GetSublistFieldsAsync(resolved, getSchema);
+                    if (sublistFields != null)
+                    {
+                        kind = NetSuiteFieldKind.Sublist;
+                    }
+                    else if (GetChoices(resolved) is { } referencedChoices && IsSelect(resolved))
+                    {
+                        //別の定義 ($ref) に書かれた固定の選択肢 ({id: {enum}, refName}) は選択の項目 (値は id)
+                        kind = NetSuiteFieldKind.Reference;
+                        choices = referencedChoices;
+                    }
+                    //読めない・行キーの無い明細・サブレコード・複数選択は列にしない
                 }
                 if (kind == null) continue;
                 columns.Add(column);
@@ -160,6 +206,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     //internal ID は NetSuite が採番する文字列
                     Kind = column == "id" ? NetSuiteFieldKind.String : kind.Value,
                     IsNullable = column == "id" || !required.Contains(property.Name),
+                    IsReadOnly = column != "id" && IsReadOnly(property.Value),
+                    Choices = column == "id" ? null : choices,
                     SublistFields = sublistFields ?? new(),
                 });
             }
@@ -211,6 +259,32 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             }
             return null;
         }
+
+        //readOnly: true (JSON Schema の読み取り専用の印)
+        static bool IsReadOnly(JsonElement property)
+            => property.ValueKind == JsonValueKind.Object && property.TryGetProperty("readOnly", out var readOnly) && readOnly.ValueKind == JsonValueKind.True;
+
+        /// <summary>
+        /// 固定の選択肢の値。文字の項目の enum か、選択の項目 (properties の id) の enum。文字の値だけを並びのまま (重なりは先のもの)。無ければ null。
+        /// </summary>
+        static List<string>? GetChoices(JsonElement property)
+        {
+            if (property.ValueKind != JsonValueKind.Object) return null;
+            if (!property.TryGetProperty("enum", out var values) &&
+                !(property.TryGetProperty("properties", out var inner) && inner.ValueKind == JsonValueKind.Object &&
+                  inner.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Object && id.TryGetProperty("enum", out values))) return null;
+            if (values.ValueKind != JsonValueKind.Array) return null;
+            var choices = new List<string>();
+            foreach (var value in values.EnumerateArray())
+            {
+                if (value.ValueKind == JsonValueKind.String && value.GetString() is { } text && !choices.Contains(text)) choices.Add(text);
+            }
+            return choices.Count == 0 ? null : choices;
+        }
+
+        //選択の項目の形 (id を持ち items を持たないオブジェクト)
+        static bool IsSelect(JsonElement element)
+            => element.TryGetProperty("properties", out var inner) && inner.ValueKind == JsonValueKind.Object && inner.TryGetProperty("id", out _) && !inner.TryGetProperty("items", out _);
 
         //$ref の先の名前 (URL の最後の部分 = metadata-catalog の名前)。$ref が無ければ null
         static string? GetReferenceName(JsonElement element)
@@ -266,6 +340,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                     Column = row.Name.ToLowerInvariant(),
                     Kind = kind.Value,
                     IsNullable = row.Name == "line" || !required.Contains(row.Name),
+                    IsReadOnly = row.Name != "line" && IsReadOnly(row.Value),
+                    Choices = row.Name == "line" ? null : GetChoices(row.Value),
                 });
             }
             return fields;

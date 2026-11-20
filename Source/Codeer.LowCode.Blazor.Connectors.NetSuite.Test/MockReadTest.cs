@@ -35,10 +35,11 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
         {
             var tables = await _h.Accessor.GetCustomTableDefinitionsAsync(TestConnections.DataSourceName);
 
-            Assert.That(tables!.Select(e => e.Name), Is.EqualTo(new[] { "subsidiary", "customer", "customrecord_sample" }));
-            var customer = tables![1].Columns.ToDictionary(e => e.Name);
-            Assert.That(customer.Keys, Is.EquivalentTo(new[] { "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary" }));
-            Assert.That(tables[1].Columns[0].Name, Is.EqualTo("id"));
+            //メタ情報のファイルの全レコード (名前順・取引の明細の表は親の後ろ)
+            Assert.That(tables!.Select(e => e.Name), Is.EqualTo(new[] { "customer", "customrecord_sample", "employee", "item", "salesorder", "salesorder_item", "subsidiary" }));
+            var customer = tables![0].Columns.ToDictionary(e => e.Name);
+            Assert.That(customer.Keys, Is.EquivalentTo(new[] { "id", "companyname", "email", "isinactive", "creditlimit", "priority", "startdate", "lastmodifieddate", "subsidiary", "emailpreference", "datecreated" }));
+            Assert.That(tables[0].Columns[0].Name, Is.EqualTo("id"));
             Assert.That((customer["id"].NetTypeFullName, customer["id"].IsNullable), Is.EqualTo((typeof(string).FullName, true)));
             //必須 (companyName) も NOT NULL にしない (本体が空の値を型の既定値に置き換えて書かないように。必須は NetSuite が保存時に確かめる)
             Assert.That((customer["companyname"].RawDbTypeName, customer["companyname"].IsNullable), Is.EqualTo(("VARCHAR2", true)));

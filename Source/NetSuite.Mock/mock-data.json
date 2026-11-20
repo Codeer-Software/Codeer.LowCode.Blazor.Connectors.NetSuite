@@ -21,11 +21,13 @@
         "priority": { "type": "integer", "title": "Priority" },
         "startDate": { "type": "date", "title": "Start Date" },
         "lastModifiedDate": { "type": "dateTime", "title": "Date Last Modified" },
-        "subsidiary": { "type": "reference", "record": "subsidiary", "required": true, "title": "Subsidiary" }
+        "subsidiary": { "type": "reference", "record": "subsidiary", "required": true, "title": "Subsidiary" },
+        "emailPreference": { "type": "select", "values": { "_default": "Default", "_hTML": "HTML", "_pDF": "PDF" }, "title": "Email Preference" },
+        "dateCreated": { "type": "dateTime", "readOnly": true, "title": "Date Created" }
       },
       "rows": [
-        { "id": 1, "companyName": "Alpha Trading", "email": "alpha@example.com", "isInactive": false, "creditLimit": 50000, "priority": 1, "startDate": "2024-04-01", "lastModifiedDate": "2026-01-05T09:15:00Z", "subsidiary": { "id": "2" } },
-        { "id": 2, "companyName": "Beta Foods", "email": "beta@example.com", "isInactive": false, "creditLimit": 12000.5, "priority": 2, "startDate": "2024-06-15", "lastModifiedDate": "2026-02-10T23:30:00Z", "subsidiary": { "id": "2" } },
+        { "id": 1, "companyName": "Alpha Trading", "email": "alpha@example.com", "isInactive": false, "creditLimit": 50000, "priority": 1, "startDate": "2024-04-01", "lastModifiedDate": "2026-01-05T09:15:00Z", "subsidiary": { "id": "2" }, "emailPreference": { "id": "_pDF" }, "dateCreated": "2024-03-28T00:00:00Z" },
+        { "id": 2, "companyName": "Beta Foods", "email": "beta@example.com", "isInactive": false, "creditLimit": 12000.5, "priority": 2, "startDate": "2024-06-15", "lastModifiedDate": "2026-02-10T23:30:00Z", "subsidiary": { "id": "2" }, "emailPreference": { "id": "_hTML" }, "dateCreated": "2024-06-10T00:00:00Z" },
         { "id": 3, "companyName": "Gamma Systems", "email": "gamma@example.com", "isInactive": false, "creditLimit": 80000, "priority": 1, "startDate": "2023-11-20", "lastModifiedDate": "2026-03-01T00:00:00Z", "subsidiary": { "id": "3" } },
         { "id": 4, "companyName": "Delta Logistics", "email": "delta@example.com", "isInactive": true, "creditLimit": 0, "priority": 3, "startDate": "2022-02-28", "lastModifiedDate": "2025-12-31T15:00:00Z", "subsidiary": { "id": "3" } },
         { "id": 5, "companyName": "Epsilon Design", "email": "epsilon@example.com", "isInactive": false, "creditLimit": 3000, "priority": 3, "startDate": "2025-01-10", "lastModifiedDate": "2026-03-15T08:00:00Z", "subsidiary": { "id": "2" } },
@@ -158,6 +160,24 @@
         { "id": 4, "entityId": "Kenji Takahashi", "firstName": "Kenji", "lastName": "Takahashi", "email": "kenji.takahashi@example.com", "title": "Engineer", "isInactive": true, "subsidiary": { "id": "1" } },
         { "id": 5, "entityId": "Yuki Tanaka", "firstName": "Yuki", "lastName": "Tanaka", "title": "Warehouse Staff", "isInactive": false, "subsidiary": { "id": "1" } }
       ]
+    }
+  },
+  "fileCabinet": {
+    "folders": [
+      { "id": 100, "name": "Attachments" }
+    ],
+    "files": [
+      { "id": 500, "name": "見積書.txt", "folder": 100, "fileType": "PLAINTEXT", "text": "Quotation for sales order 1 (sample)." },
+      { "id": 501, "name": "spec.csv", "folder": 100, "fileType": "CSV", "contentType": "text/csv", "text": "item,quantity\nWidget Small,10\n" }
+    ],
+    "attachments": [
+      { "record": "salesOrder", "id": 1, "file": 500 },
+      { "record": "salesOrder", "id": 1, "file": 501 }
+    ]
+  },
+  "savedSearches": {
+    "customsearch_clb_transaction_files": {
+      "columns": { "record": "internalid", "file": "file_internalid", "name": "file_name", "size": "file_documentsize", "type": "file_filetype" }
     }
   }
 }

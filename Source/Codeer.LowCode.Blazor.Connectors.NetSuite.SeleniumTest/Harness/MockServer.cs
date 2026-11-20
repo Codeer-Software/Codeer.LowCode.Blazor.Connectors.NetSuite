@@ -22,8 +22,6 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
         /// <summary>OpenID Connect の Authority (https で立てたときだけ。それ以外は空)。</summary>
         public string OidcAuthority { get; }
 
-        public const string Records = "subsidiary,customer,customrecord_sample,employee,item,salesorder";
-
         MockServer(WebApplication app, MockNetSuite mock, string serviceUrl, string oidcAuthority)
         {
             _app = app;
@@ -49,7 +47,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.SeleniumTest.Harness
 
         /// <summary>Web アプリの NetSuite のデータソースの接続文字列 (鍵はテストがその場で作ったもの)。</summary>
         public string GetConnectionString(string privateKeyPath)
-            => $"Provider=NetSuite;ServiceUrl={ServiceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={privateKeyPath};Records={Records}";
+            => $"Provider=NetSuite;ServiceUrl={ServiceUrl};ClientId=mock-client;CertificateId=mock-cert;PrivateKeyPath={privateKeyPath}" +
+            //添付ファイル: mock-data.json のフォルダと保存検索
+            ";AttachmentFolderId=100;AttachmentSavedSearchId=customsearch_clb_transaction_files;AttachmentSearchFileColumn=file_internalid;AttachmentSearchFileNameColumn=file_name;AttachmentSearchFileSizeColumn=file_documentsize;AttachmentSearchFileTypeColumn=file_filetype";
 
         /// <summary>モックのデータを SuiteQL で読む。値はすべて文字列 (空の項目は無い)、キーは小文字。</summary>
         public List<Dictionary<string, string>> Query(string suiteQl, params string[] parameters)

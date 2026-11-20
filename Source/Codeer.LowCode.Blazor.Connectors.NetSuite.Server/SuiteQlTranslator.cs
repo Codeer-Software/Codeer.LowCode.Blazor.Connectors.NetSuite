@@ -48,9 +48,11 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         public List<SuiteQlResultColumn> Columns { get; init; } = new();
         /// <summary>明細の列。行ごとに <see cref="Table"/> のレコードを REST で読んで値にする。</summary>
         public List<SuiteQlResultColumn> Sublists { get; init; } = new();
+        /// <summary>添付ファイルの仮想の列 (<see cref="NetSuiteFieldKind.Attachments"/>)。読んだ行の全部を 1 回の保存検索で引き当てる。</summary>
+        public List<SuiteQlResultColumn> Attachments { get; init; } = new();
         /// <summary>主表のレコード名 (REST のレコード名)。</summary>
         public string Table { get; init; } = string.Empty;
-        /// <summary>SuiteQL の結果での主表の internal ID の列名 (明細の列があるとき)。</summary>
+        /// <summary>SuiteQL の結果での主表の internal ID の列名 (明細・添付の列があるとき)。</summary>
         public string IdSourceName { get; init; } = string.Empty;
     }
 
@@ -200,8 +202,9 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         internal static bool IsSelect(string sql)
             => WithoutSpaces(Tokenize(sql)).FirstOrDefault()?.IsWord("select") == true;
 
+        /// <param name="getDefinition">表 (レコード・明細の表) の定義。無い表はエラーにする。</param>
         internal static async Task<SuiteQlSelect> TranslateSelectAsync(string sql, IReadOnlyDictionary<string, object?> args,
-            Func<string, bool> isAllowedRecord, Func<string, Task<NetSuiteRecordDefinition>> getDefinition)
+            Func<string, Task<NetSuiteRecordDefinition>> getDefinition)
         {
             var tokens = WithoutSpaces(Tokenize(sql));
             if (tokens.Count == 0 || !tokens[0].IsWord("select")) throw NotSupported(sql);
@@ -251,7 +254,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 });
             }
 
-            //どの深さでも、読む表は Records に書かれたレコードだけ
+            //どの深さでも、読む表は定義があるもの (メタ情報のファイルにあるレコードと明細の表) だけ。無ければ getDefinition がエラーにする
             var depth = 0;
             var topFrom = -1;
             var topGroupBy = -1;
@@ -262,8 +265,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 else if (tokens[i].IsSymbol(")")) depth--;
                 else if ((tokens[i].IsWord("from") || tokens[i].IsWord("join")) && i + 1 < tokens.Count && !tokens[i + 1].IsSymbol("("))
                 {
-                    var table = IdentifierText(tokens[i + 1], sql);
-                    if (!isAllowedRecord(table)) throw new NetSuiteException($"Record type '{table}' is not listed in Records of the NetSuite data source.");
+                    await getDefinition(IdentifierText(tokens[i + 1], sql));
                 }
                 if (depth != 0) continue;
                 if (tokens[i].IsWord("from") && topFrom < 0) topFrom = i;
@@ -314,6 +316,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             var body = new List<SqlToken>();
             body.Add(new(SqlTokenKind.Word, "select"));
             var sublists = new List<SuiteQlResultColumn>();
+            var attachments = new List<SuiteQlResultColumn>();
             var idSourceName = string.Empty;
             var emitted = 0;
             for (var index = 0; index < select.Count; index++)
@@ -348,6 +351,13 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                         //明細は SuiteQL では読まず、行ごとにレコードを REST で読む。読めるのは主表の明細だけ
                         if (!isMain) throw SublistNotSupported(table, field);
                         sublists.Add(new SuiteQlResultColumn { Key = key, Kind = kind, Sublist = field });
+                        continue;
+                    }
+                    if (kind == NetSuiteFieldKind.Attachments)
+                    {
+                        //添付は SuiteQL では読まず、読んだ行の internal ID で保存検索の結果に引き当てる。読めるのは主表の添付だけ
+                        if (!isMain) throw SublistNotSupported(table, field);
+                        attachments.Add(new SuiteQlResultColumn { Key = key, Kind = kind });
                         continue;
                     }
                     if (isMain && field.Column == "id" && string.IsNullOrEmpty(idSourceName)) idSourceName = sourceName;
@@ -388,8 +398,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             }
             //明細の列は、主表の列として select に書かれたときだけ読める (条件・並び・集計・結合先には使えない)
             await CheckNoSublistAsync(tokens.GetRange(topFrom, tokens.Count - topFrom), allAliases, getDefinition);
-            //明細を読むには行の internal ID が要る。本体が select していなければ足す (結果としては返さない)
-            if (sublists.Count != 0 && string.IsNullOrEmpty(idSourceName))
+            //明細・添付を読むには行の internal ID が要る。本体が select していなければ足す (結果としては返さない)
+            if ((sublists.Count != 0 || attachments.Count != 0) && string.IsNullOrEmpty(idSourceName))
             {
                 idSourceName = "nsxid";
                 if (emitted++ != 0) body.Add(new(SqlTokenKind.Symbol, ","));
@@ -448,6 +458,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 Offset = offset,
                 Columns = columns,
                 Sublists = sublists,
+                Attachments = attachments,
                 Table = aliases.TryGetValue(mainAlias, out var main) ? main : string.Empty,
                 IdSourceName = idSourceName,
             };
@@ -469,7 +480,8 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
         }
 
         static NetSuiteException SublistNotSupported(string table, NetSuiteFieldDefinition field)
-            => new($"The sublist column '{field.Column}' of record type '{table}' can only be read as a column of the main record. It cannot be used in a condition, a sort, an aggregate or a joined record.");
+            => new($"The {(field.Kind == NetSuiteFieldKind.Attachments ? "attachments" : "sublist")} column '{field.Column}' of record type '{table}' can only be read as a column of the main record. " +
+                "It cannot be used in a condition, a sort, an aggregate or a joined record.");
 
         //式・条件の中に明細の列 (別名.列) があれば例外
         static async Task CheckNoSublistAsync(List<SqlToken> tokens, Dictionary<string, string> aliases, Func<string, Task<NetSuiteRecordDefinition>> getDefinition)
@@ -479,7 +491,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
                 if (!tokens[i].IsIdentifier || !tokens[i + 1].IsSymbol(".") || !tokens[i + 2].IsIdentifier) continue;
                 if (!aliases.TryGetValue(tokens[i].Text, out var table)) continue;
                 var field = (await getDefinition(table)).FindByColumn(tokens[i + 2].Text);
-                if (field?.Kind == NetSuiteFieldKind.Sublist) throw SublistNotSupported(table, field);
+                if (field?.Kind is NetSuiteFieldKind.Sublist or NetSuiteFieldKind.Attachments) throw SublistNotSupported(table, field);
             }
         }
 
@@ -504,10 +516,57 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Server
             ["vendorcredit"] = "VendCred",
             ["customerdeposit"] = "CustDep",
             ["opportunity"] = "Opprtnty",
+            //2026-11-20 に足したもの (種別の値は公開の記事の一覧。REST のレコード名との対応は実物で確かめていない)
+            ["transferorder"] = "TrnfrOrd",
+            ["workorder"] = "WorkOrd",
+            ["workorderissue"] = "WOIssue",
+            ["workordercompletion"] = "WOCompl",
+            ["workorderclose"] = "WOClose",
+            ["assemblybuild"] = "Build",
+            ["assemblyunbuild"] = "Unbuild",
+            ["inventoryadjustment"] = "InvAdjst",
+            ["inventorytransfer"] = "InvTrnfr",
+            ["inventorycount"] = "InvCount",
+            ["bintransfer"] = "BinTrnfr",
+            ["binworksheet"] = "BinWksht",
+            ["expensereport"] = "ExpRept",
+            ["customerrefund"] = "CustRfnd",
+            ["depositapplication"] = "DepAppl",
+            ["deposit"] = "Deposit",
+            ["check"] = "Check",
+            ["creditcardcharge"] = "CardChrg",
+            ["vendorreturnauthorization"] = "VendAuth",
+            ["purchaserequisition"] = "PurchReq",
+            ["blanketpurchaseorder"] = "BlankOrd",
+            ["purchasecontract"] = "PurchCon",
+            ["requestforquote"] = "Rfq",
+            ["vendorprepayment"] = "VPrep",
+            ["vendorprepaymentapplication"] = "VPrepApp",
         };
 
         /// <summary>取引のレコードなら transaction 表の type の値。取引でなければ null。</summary>
         internal static string? GetTransactionType(string recordType) => _transactionTypes.TryGetValue(recordType, out var type) ? type : null;
+
+        //取引 → transactionline の行 (mainline・taxline でない行) がそのまま行になる明細の REST 名。
+        //品目の明細と経費の明細の両方を持つ取引 (発注・仕入請求など) は、transactionline で 2 つを分ける条件を確かめていないので入れない。
+        //仕訳 (journalentry) は mainline の付き方を確かめていないので入れない
+        static readonly Dictionary<string, string> _lineSublists = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["salesorder"] = "item",
+            ["invoice"] = "item",
+            ["estimate"] = "item",
+            ["creditmemo"] = "item",
+            ["cashsale"] = "item",
+            ["returnauthorization"] = "item",
+            ["opportunity"] = "item",
+            ["itemfulfillment"] = "item",
+            ["itemreceipt"] = "item",
+            ["transferorder"] = "item",
+        };
+
+        /// <summary>明細の表を作る明細 (transactionline の行がその明細の行になるもの) の REST 名。無ければ null。</summary>
+        internal static string? GetLineSublist(string recordType)
+            => GetTransactionType(recordType) != null && _lineSublists.TryGetValue(recordType, out var sublist) ? sublist : null;
 
         //from / join の取引のレコードを (select * from transaction where type = '<種別>') <別名> にする (別名が無ければ表名を別名に)。
         //明細の表は (select tl.* from transactionline tl inner join transaction t on t.id = tl.transaction where t.type = '<種別>' and tl.mainline = 'F' and tl.taxline = 'F') <別名>

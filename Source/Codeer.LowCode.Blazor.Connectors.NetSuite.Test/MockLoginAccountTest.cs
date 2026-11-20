@@ -16,7 +16,7 @@ namespace Codeer.LowCode.Blazor.Connectors.NetSuite.Test
 
         [SetUp]
         public async Task SetUp()
-            => _h = await MockHarness.StartAsync(edit: s => s.Records.Add("employee"));
+            => _h = await MockHarness.StartAsync();
 
         [TearDown]
         public async Task TearDown() => await _h.DisposeAsync();
